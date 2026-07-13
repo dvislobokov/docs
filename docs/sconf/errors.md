@@ -9,7 +9,7 @@ sconf reports failures through wrapped sentinel errors, so callers branch with `
 | `sconf.ErrHelp` | `sconf` | A help flag was found in `args`; usage has already been printed to stdout. Mirrors `flag.ErrHelp`. |
 | `sconf.ErrBindType` (= `bind.ErrBindType`) | `sconf`, `sconf/bind` | A value cannot be converted to the target field type (wrapped via `%w`). |
 | `sconf.ErrEnum` (= `bind.ErrEnum`) | `sconf`, `sconf/bind` | A value is not in the field's `enum` list (wrapped via `%w`). |
-| `vault.ErrNotConfigured` | `sconf/vault` | The struct has secret fields but the Vault environment is incomplete (missing `VAULT_ADDR`, missing auth credentials, or an unknown `VAULT_AUTH`). |
+| `sconf.ErrVaultNotConfigured` | `sconf` | The struct has secret fields but the Vault environment is incomplete (missing `VAULT_ADDR`, missing auth credentials, or an unknown `VAULT_AUTH`). |
 
 ## The standard handling pattern
 
@@ -57,7 +57,7 @@ file       config: read "nope.json": open nope.json: The system cannot find the 
 
 `Load` checks `args` for `-h`, `--h`, `-help`, `--help`, `-?`, `/?`, `/help`, `/h` *before* building anything. On a match it prints `Usage[T]()` to stdout and returns `ErrHelp` — the caller's only job is to exit. Pass `nil` args to opt out entirely.
 
-## `vault.ErrNotConfigured` in detail
+## `sconf.ErrVaultNotConfigured` in detail
 
 Returned only when the configuration actually contains secret fields. The message names the missing variable, for example:
 
@@ -68,7 +68,7 @@ vault: not configured: set VAULT_ADDR (or VAULT_URL) — config has secret field
 Other variants: `VAULT_AUTH=token requires VAULT_TOKEN`, `VAULT_AUTH=kubernetes requires VAULT_K8S_ROLE`, `VAULT_AUTH=approle requires VAULT_ROLE_ID and VAULT_SECRET_ID`, and `unknown VAULT_AUTH "..."`. Handle it when you want a friendlier startup diagnostic:
 
 ```go
-if errors.Is(err, vault.ErrNotConfigured) {
+if errors.Is(err, sconf.ErrVaultNotConfigured) {
 	log.Fatal("this service needs Vault; see deployment docs: ", err)
 }
 ```

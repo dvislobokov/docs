@@ -9,7 +9,7 @@ sconf is a layered configuration library for Go modeled after `Microsoft.Extensi
 - **Arrays of objects from environment variables** using the `__` → `:` convention — a capability the flat model gives you for free (and one that viper's per-source merge model does not provide; viper cannot override one element of an array from an env var, since `BindEnv` operates on whole keys of unflattened trees).
 - **Typed binding via generics.** One entry point, `sconf.Load[T]`, returns `*T` with defaults, enum validation, `time.Duration`/`time.Time` parsing, pointers, maps, slices, and embedded structs handled.
 - **Auto-generated `--help`** from your struct tags, plus programmatic access via `Describe[T]`.
-- **Secrets from HashiCorp Vault** as an optional package: declare a field as `secret.UserPass`, `secret.Cert`, `secret.KV`, or `secret.Value`, keep only the *path* in your config file, and the values are fetched at load time with optional background refresh. The core library has no Vault dependency.
+- **Secrets from HashiCorp Vault** built in: declare a field as `secret.UserPass`, `secret.Cert`, `secret.KV`, or `secret.Value`, keep only the *path* in your config file, and the values are fetched at load time and refreshed in the background automatically.
 - **Operational niceties:** optional files, waiting for files to appear on disk (Vault sidecar / init containers), and typed sentinel errors.
 
 ## Installation
@@ -18,7 +18,7 @@ sconf is a layered configuration library for Go modeled after `Microsoft.Extensi
 go get github.com/dvislobokov/sconf
 ```
 
-Requires Go 1.24 or newer. The Vault integration lives in the separate `github.com/dvislobokov/sconf/vault` package and is only compiled into your binary if you import it.
+Requires Go 1.24 or newer (v1.1.0+). The Vault integration is part of the core package — if your config has no secret fields, Vault is simply never contacted.
 
 ## A minimal example
 
@@ -83,7 +83,7 @@ The value of `workers` came from the environment, `limits:process_timeout` from 
 | `sconf/provider` | `JSONFile`, `YAMLFile`, `TOMLFile`, `Env`, `Args`, `Map`, file options |
 | `sconf/bind` | reflection binder, `Unmarshaler` / `Validator` hooks, `Describe` / `Usage` |
 | `sconf/secret` | secret field types (`UserPass`, `Cert`, `KV`, `Value`) — standard library only |
-| `sconf/vault` | Vault-backed resolver, background refresh (`Watch`), `vault.KV` provider |
+| `sconf/internal/vault` | Vault client internals — used by the core, not imported directly |
 
 ## Where to go next
 

@@ -169,4 +169,4 @@ sconf.New().
 	Add(dotenvProvider{path: "overrides.env"}) // your own source
 ```
 
-See [Advanced](./advanced.md#writing-a-custom-provider) for a complete, verified custom provider, and [Vault secrets](./vault.md#the-vaultkv-configuration-provider) for the ready-made `vault.KV` provider that layers a Vault KV secret into the tree.
+See [Advanced](./advanced.md#writing-a-custom-provider) for a complete, verified custom provider, and [Vault secrets](./vault.md#the-vault-kv-configuration-layer) for the ready-made `AddVaultKV` layer that merges a Vault KV secret into the tree.

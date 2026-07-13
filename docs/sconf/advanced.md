@@ -173,14 +173,6 @@ Guidelines for provider authors:
 - Keys may be emitted in any case — the merged map normalizes to lower case and remembers the original spelling for error messages.
 - `Load` is called once per `Build`. If your source is expensive (network), consider caching inside the provider.
 
-## Registering a custom secret resolver
+## Adding a custom secret type
 
-The hook the Vault package uses is public. `sconf.RegisterSecretResolver` installs a `sconf.SecretResolver`, which `Load` invokes after binding:
-
-```go
-type SecretResolver interface {
-	Resolve(ctx context.Context, target any) error
-}
-```
-
-`Resolve` must return `nil` when the configuration contains no secret fields, and repeated registration replaces the previous resolver. The stock implementation registers itself from `init()` in `github.com/dvislobokov/sconf/vault` — a blank import is enough. See [Vault secrets](./vault.md).
+Since v1.1.0 the Vault resolver is built into the core — `RegisterSecretResolver` and the `SecretResolver` interface are gone. To extend the secrets machinery, implement `secret.Resolvable` (and optionally `secret.Refreshable`) on your own field type: `sconf.Load` discovers such fields automatically after binding and fills them through the built-in Vault client, including background refresh. See [Vault secrets](./vault.md).

@@ -1,20 +1,14 @@
 # Vault Secrets
 
-sconf can resolve configuration values from HashiCorp Vault. Your config file holds only the *path* to a secret; the value is fetched at load time and, optionally, refreshed in the background. The integration is split so the core stays dependency-free: `sconf/secret` defines the field types (standard library only), and `sconf/vault` implements the actual Vault client and registers itself as the resolver.
+sconf resolves configuration values from HashiCorp Vault out of the box (since v1.1.0 the integration is built into the core — no extra imports, no registration). Your config file holds only the *path* to a secret; the value is fetched at load time and refreshed in the background automatically. `sconf/secret` defines the field types (standard library only); the Vault client itself lives in the internal `sconf/internal/vault` package.
 
 ## How it works
 
 1. Declare fields of type `secret.UserPass`, `secret.Cert`, `secret.KV`, or `secret.Value` in your struct.
 2. In the config file, set each field to a Vault path (optionally with query-string parameters).
-3. Import the resolver — a blank import is enough, its `init()` calls `sconf.RegisterSecretResolver`:
+3. Call the ordinary `sconf.Load` — after binding it walks the struct, finds every field implementing `secret.Resolvable`, fills it from Vault, and starts background refresh for refreshable secrets.
 
-   ```go
-   import _ "github.com/dvislobokov/sconf/vault"
-   ```
-
-4. After binding, `sconf.Load` walks the struct, finds every field implementing `secret.Resolvable`, and fills it from Vault.
-
-If the struct has **no** secret fields, Vault is never contacted and no environment is required. If secret fields exist but the Vault environment is not configured, `Load` fails with an error wrapping `vault.ErrNotConfigured`.
+If the struct has **no** secret fields, Vault is never contacted and no environment is required. If secret fields exist but the Vault environment is not configured, `Load` fails with an error wrapping `sconf.ErrVaultNotConfigured`.
 
 ## Secret field types
 
@@ -59,28 +53,26 @@ type Config struct {
 	Extra     secret.KV       `yaml:"extra"`
 	TLS       secret.Cert     `yaml:"tls"`
 
-	// Ordinary field populated by the vault.KV *provider* layer below.
+	// Ordinary field populated by the Vault KV *layer* below.
 	Webhook struct {
 		Secret string `yaml:"webhook_secret"`
 	} `yaml:"webhook"`
 }
 
 func main() {
-	ctx := context.Background()
-
-	cfg, watcher, err := vault.Load[Config](ctx,
+	cfg, err := sconf.Load[Config](
 		sconf.New().
 			AddYAMLFile("appsettings.yaml").
-			Add(vault.KV("secret/data/billing", vault.At("webhook"))),
+			AddVaultKVAt("secret/data/billing", "webhook"),
 		os.Args[1:],
-		vault.WithErrorHandler(func(err error) {
+		sconf.WithSecretErrorHandler(func(err error) {
 			log.Println("vault refresh:", err)
 		}),
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer watcher.Stop()
+	// Secrets are filled and kept fresh in the background automatically.
 	// ...
 }
 ```
@@ -104,27 +96,31 @@ db: user=v-billing-dev pass_len=17 (path database/creds/billing)
 stripe key: sk_test_51...
 extra: region=eu-central-1 (fields: 3)
 tls: serial=0a:1b:2c resolved=true
-webhook secret (via KV provider layer): whsec_local
-secrets refreshing in background: 4
+webhook secret (via KV layer): whsec_local
+secrets refreshing in background automatically
 ```
 
-## `vault.Load` and background refresh
+## Background refresh
+
+`sconf.Load` starts one goroutine per refreshable secret right after resolving them — the refresher runs entirely inside the library and nothing is returned to manage. Its lifetime is tied to the context:
+
+- `sconf.Load` uses `context.Background()` — secrets are refreshed for the lifetime of the process.
+- `sconf.LoadContext(ctx, ...)` — cancelling `ctx` stops the refresh goroutines (it also bounds the initial Vault requests).
 
 ```go
-func Load[T any](ctx context.Context, b *sconf.Builder, args []string,
-	opts ...WatchOption) (*T, *Watcher, error)
+cfg, err := sconf.LoadContext[Config](ctx, builder, args,
+	sconf.WithSecretErrorHandler(func(err error) { log.Println("refresh:", err) }),
+	sconf.WithSecretRetryBackoff(15*time.Second),
+)
+// cancel ctx on shutdown — the background refresh stops with it
 ```
-
-`vault.Load` is `sconf.LoadContext` plus `vault.Watch`: it loads and binds the configuration, resolves the secrets, then starts one goroutine per refreshable secret. Stop them with `Watcher.Stop()` (idempotent, nil-safe, waits for the goroutines) or by cancelling `ctx`. `Watcher.Count()` reports how many secrets are being refreshed.
-
-You can also run the pieces separately: `sconf.Load` first, then `vault.Watch(ctx, cfg, opts...)` on the already-resolved struct.
 
 Options:
 
 | Option | Effect |
 |---|---|
-| `vault.WithErrorHandler(fn)` | Called with each background-refresh error. Default: errors are silently ignored and the previous secret value stays in place until the next attempt. |
-| `vault.WithRetryBackoff(d)` | Pause before retrying after a failed refresh. Default: 30 s. |
+| `sconf.WithSecretErrorHandler(fn)` | Called with each background-refresh error. Default: errors are silently ignored and the previous secret value stays in place until the next attempt. |
+| `sconf.WithSecretRetryBackoff(d)` | Pause before retrying after a failed refresh. Default: 30 s. |
 
 ### Refresh cadence
 
@@ -156,7 +152,7 @@ The connection is configured entirely through environment variables:
 | `VAULT_APPROLE_MOUNT` | AppRole auth mount | `approle` |
 | `VAULT_SECRETS_FILE` | Local secrets file — enables offline development mode | — |
 
-Missing required variables produce an error wrapping `vault.ErrNotConfigured` that names the exact variable to set.
+Missing required variables produce an error wrapping `sconf.ErrVaultNotConfigured` that names the exact variable to set.
 
 ## Local development: `VAULT_SECRETS_FILE`
 
@@ -189,28 +185,28 @@ pki/issue/internal:
 `VAULT_MOUNTPATH` is **not** applied in file mode — the file keys must match the paths written in the application config verbatim. There are no leases in file mode, so refresh intervals fall back to the defaults (or `?refresh=`). Add the file to `.gitignore`.
 :::
 
-## The `vault.KV` configuration provider
+## The Vault KV configuration layer
 
-Secret *fields* fill a single struct field. When you instead want the contents of a KV secret to become ordinary configuration keys — bindable into plain `string`/`int` fields, overridable by other layers — add the `vault.KV` **provider** as a layer:
+Secret *fields* fill a single struct field. When you instead want the contents of a KV secret to become ordinary configuration keys — bindable into plain `string`/`int` fields, overridable by other layers — add a Vault KV **layer** with `AddVaultKV` / `AddVaultKVAt`:
 
 ```go
 cfg, err := sconf.Load[Config](
 	sconf.New().
 		AddYAMLFile("appsettings.yaml").
-		Add(vault.KV("secret/data/myapp")).                     // into the root
-		Add(vault.KV("secret/data/db", vault.At("database"))),  // into the "database" section
+		AddVaultKV("secret/data/myapp").                // into the root
+		AddVaultKVAt("secret/data/db", "database"),     // into the "database" section
 	os.Args[1:],
 )
 ```
 
 - The path is the full KV path (include the `data` segment for KV v2); the v2 envelope is unwrapped automatically.
-- `vault.At(prefix)` places the secret's fields under a section; without it they land at the root.
+- `AddVaultKVAt(path, section)` places the secret's fields under a section; `AddVaultKV(path)` lands them at the root.
 - Nested objects and lists inside the secret flatten like any other source (`key:subkey`, `list:0`).
-- Connection settings come from the same environment variables as the resolver, and `VAULT_SECRETS_FILE` works here too (that is how the example above fills `webhook:webhook_secret`).
+- Connection settings come from the same environment variables as secret fields, and `VAULT_SECRETS_FILE` works here too (that is how the example above fills `webhook:webhook_secret`).
 
 ## Failure behavior
 
-- **Secret fields present, Vault unreachable or misconfigured** — `Load` returns an error; the application does not start with empty secrets. Check `errors.Is(err, vault.ErrNotConfigured)` for the misconfiguration case.
+- **Secret fields present, Vault unreachable or misconfigured** — `Load` returns an error; the application does not start with empty secrets. Check `errors.Is(err, sconf.ErrVaultNotConfigured)` for the misconfiguration case.
 - **No secret fields** — the resolver returns immediately; Vault is never dialed.
-- **Background refresh failure** — the previous value is kept, the error goes to `WithErrorHandler` (if set), and the watcher retries after the backoff.
-- **`Resolved()` returns `false`** after a successful `Load` only if the resolver never ran — typically a missing blank import of `sconf/vault`.
+- **Background refresh failure** — the previous value is kept, the error goes to `WithSecretErrorHandler` (if set), and the refresher retries after the backoff.
+- **`Resolved()` returns `false`** after a successful `Load` only if the field's path was never set in the configuration.

@@ -9,11 +9,13 @@ The root package: the builder, the merged configuration, the generic entry point
 ### Loading
 
 ```go
-func Load[T any](b *Builder, args []string) (*T, error)
-func LoadContext[T any](ctx context.Context, b *Builder, args []string) (*T, error)
+func Load[T any](b *Builder, args []string, opts ...LoadOption) (*T, error)
+func LoadContext[T any](ctx context.Context, b *Builder, args []string, opts ...LoadOption) (*T, error)
 ```
 
-The main entry point. In order: prints usage and returns `ErrHelp` if `args` contains a help flag; appends `args` as the highest-priority command-line layer (when non-empty); builds the merged configuration; binds it into a new `*T`; resolves secret fields through the registered `SecretResolver` (if any). `args` is usually `os.Args[1:]`; pass `nil` to skip both the CLI layer and the help check. `LoadContext` threads a context into the secret resolver.
+The main entry point. In order: prints usage and returns `ErrHelp` if `args` contains a help flag; appends `args` as the highest-priority command-line layer (when non-empty); builds the merged configuration; binds it into a new `*T`; resolves secret fields from Vault; starts background refresh for every refreshable secret. `args` is usually `os.Args[1:]`; pass `nil` to skip both the CLI layer and the help check.
+
+The context passed to `LoadContext` bounds both the initial Vault requests and the **lifetime of the background refresh**: cancelling it stops the refresh goroutines. `Load` uses `context.Background()`, so secrets are refreshed for the lifetime of the process — nothing to stop or manage.
 
 ```go
 cfg, err := sconf.Load[Config](
@@ -37,10 +39,14 @@ func (b *Builder) AddTOMLFile(path string, opts ...FileOption) *Builder
 func (b *Builder) AddEnvironmentVariables(prefix string) *Builder
 func (b *Builder) AddCommandLine(args []string) *Builder
 func (b *Builder) AddInMemory(values map[string]string) *Builder
+func (b *Builder) AddVaultKV(path string) *Builder
+func (b *Builder) AddVaultKVAt(path, section string) *Builder
 func (b *Builder) Build() (*Config, error)
 ```
 
 Collects providers in order; `Build` loads each one and merges the results last-wins per key. All `Add*` methods return the builder for chaining.
+
+`AddVaultKV` layers the fields of one Vault KV secret into the configuration tree (full path; the KV v2 `data`/`metadata` envelope is unwrapped, nested objects and lists flatten like any other source). `AddVaultKVAt` places the fields under a section prefix instead of the root. Connection settings come from the same environment variables as secret fields, and `VAULT_SECRETS_FILE` is honored for local development. See [Vault secrets](./vault.md#the-vault-kv-configuration-layer).
 
 ### type Config
 
@@ -80,17 +86,20 @@ type UsageEntry = bind.Entry
 
 `Usage` renders human-readable help from `T`'s fields and tags (keys shown as `--section:key`). `Describe` returns the same data structured. `HelpRequested` reports whether `args` contains `-h`, `--h`, `-help`, `--help`, `-?`, `/?`, `/help`, or `/h`. See [Usage and help](./usage-help.md).
 
-### Secret resolver hook
+### Secrets and background refresh
 
 ```go
-type SecretResolver interface {
-	Resolve(ctx context.Context, target any) error
-}
+var ErrVaultNotConfigured error // wraps "vault: not configured"
 
-func RegisterSecretResolver(r SecretResolver)
+type LoadOption func(*loadOptions)
+
+func WithSecretErrorHandler(fn func(error)) LoadOption
+func WithSecretRetryBackoff(d time.Duration) LoadOption
 ```
 
-`Load` calls the registered resolver after binding. `Resolve` must return `nil` when the target has no secret fields. Registration replaces any previous resolver; `sconf/vault` registers itself from `init()` (blank import).
+Vault support is built in: `Load` fills every field implementing `secret.Resolvable` after binding and starts their background refresh — no imports or registration required. If the target has no secret fields, Vault is never contacted. If secret fields exist but the environment is not configured, `Load` fails with an error wrapping `ErrVaultNotConfigured`.
+
+Refresh errors are silently swallowed by default (the previous value is kept); `WithSecretErrorHandler` observes them. `WithSecretRetryBackoff` sets the pause before retrying a failed refresh (default 30 s).
 
 ### Errors and aliases
 
@@ -211,7 +220,7 @@ Non-generic versions of `sconf.Describe[T]` / `sconf.Usage[T]`, for when you hav
 
 ## Package `sconf/secret`
 
-Secret field types. Standard library only — the package describes *what* to fetch; `sconf/vault` does the fetching. All concrete types implement `Unmarshaler` (they parse the path string from your config), `Resolvable`, and `Refreshable`, and their getters are safe for concurrent use.
+Secret field types. Standard library only — the package describes *what* to fetch; the core's built-in Vault integration does the fetching. All concrete types implement `Unmarshaler` (they parse the path string from your config), `Resolvable`, and `Refreshable`, and their getters are safe for concurrent use.
 
 ### Interfaces and requests
 
@@ -324,85 +333,11 @@ func KVFields(data map[string]any) map[string]any
 
 Strips the KV v2 `data`/`metadata` envelope, returning the inner fields; KV v1 (and other engines') responses are returned unchanged. Exported for reuse by custom resolvers/providers.
 
-## Package `sconf/vault`
+## Vault integration (built-in)
 
-The Vault-backed implementation: the resolver (registered via blank import), background refresh, and a KV configuration provider. Connection settings come from environment variables — see the [table](./vault.md#environment-configuration).
+Since v1.1.0 the Vault client lives in `sconf/internal/vault` and is wired into the core — there is no importable `sconf/vault` package and no separate `Load`/`Watch`/`Watcher` API. `sconf.Load` resolves secret fields and runs the background refresh internally; the refresh stops when the `LoadContext` context is cancelled (with `Load` it runs for the lifetime of the process). Connection settings come from environment variables — see the [table](./vault.md#environment-configuration).
 
-```go
-var ErrNotConfigured = fmt.Errorf("vault: not configured")
-```
-
-Returned (wrapped) when secret fields exist but the environment is incomplete.
-
-### func Load
-
-```go
-func Load[T any](ctx context.Context, b *sconf.Builder, args []string,
-	opts ...WatchOption) (*T, *Watcher, error)
-```
-
-`sconf.LoadContext` followed by `Watch`: loads, binds, resolves secrets, and starts background refresh. Call `Watcher.Stop()` (or cancel `ctx`) on shutdown.
-
-```go
-cfg, watcher, err := vault.Load[Config](ctx,
-	sconf.New().AddYAMLFile("appsettings.yaml"),
-	os.Args[1:],
-	vault.WithErrorHandler(func(err error) { log.Println("vault refresh:", err) }),
-)
-if err != nil {
-	log.Fatal(err)
-}
-defer watcher.Stop()
-```
-
-### func Watch
-
-```go
-func Watch(ctx context.Context, target any, opts ...WatchOption) (*Watcher, error)
-```
-
-Starts background refresh for an already-loaded configuration (a pointer to a struct, normally the result of `sconf.Load`). One goroutine per secret with a non-zero refresh interval; secrets without an interval are skipped.
-
-### type Watcher
-
-```go
-type Watcher struct{ /* unexported */ }
-
-func (w *Watcher) Count() int
-func (w *Watcher) Stop()
-```
-
-`Count` — number of secrets being refreshed. `Stop` — cancels the refresh goroutines and waits for them; safe on `nil` and safe to call repeatedly.
-
-### type WatchOption
-
-```go
-type WatchOption func(*watchOptions)
-
-func WithErrorHandler(fn func(error)) WatchOption
-func WithRetryBackoff(d time.Duration) WatchOption
-```
-
-Refresh errors are silently swallowed by default (the previous value is kept); `WithErrorHandler` observes them. `WithRetryBackoff` sets the pause before retrying a failed refresh (default 30 s).
-
-### func KV / type KVOption / func At
-
-```go
-func KV(path string, opts ...KVOption) *kvProvider
-
-type KVOption func(*kvProvider)
-
-func At(prefix string) KVOption
-```
-
-A `sconf.Provider` that reads a Vault KV secret (full path, KV v2 envelope unwrapped) and layers its fields into the configuration tree — nested objects and lists flatten like any other source. `At` places the fields under a section prefix instead of the root. Honors `VAULT_SECRETS_FILE` for local development.
-
-```go
-sconf.New().
-	AddYAMLFile("appsettings.yaml").
-	Add(vault.KV("secret/data/myapp")).                    // into the root
-	Add(vault.KV("secret/data/db", vault.At("database")))  // into a section
-```
+The related public surface is in the root package: `ErrVaultNotConfigured`, `WithSecretErrorHandler`, `WithSecretRetryBackoff`, `Builder.AddVaultKV`, and `Builder.AddVaultKVAt` (all documented above).
 
 ### Refresh policy (behavioral reference)
 
