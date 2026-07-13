@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "Go Libraries"
-  text: "Configuration. ORM. Logging."
-  tagline: Production-grade building blocks for Go services — layered configuration, a real Unit of Work ORM, and Serilog-style structured logging.
+  text: "Config. ORM. Logging. Hosting. Codegen."
+  tagline: Production-grade building blocks for Go services — layered configuration, a real Unit of Work ORM, Serilog-style structured logging, a hosting framework, and a protoc-free protobuf generator.
   actions:
     - theme: brand
       text: Get Started with sconf
@@ -15,6 +15,12 @@ hero:
     - theme: alt
       text: srog
       link: /srog/
+    - theme: alt
+      text: shost
+      link: /shost/
+    - theme: alt
+      text: protogen
+      link: /protogen/
 
 features:
   - icon: ⚙️
@@ -31,5 +37,15 @@ features:
     title: srog — structured logging
     details: Serilog-style message templates on top of zerolog. Zero-allocation hot path, multi-sink fan-out, rotation, ECS and OpenTelemetry output, HTTP and gRPC integrations.
     link: /srog/
+    linkText: Read the docs
+  - icon: 🧬
+    title: shost — hosting framework
+    details: Microsoft.Extensions.Hosting for Go. Ordered startup, graceful shutdown with a deadline, restart supervision, readiness gating, HTTP/cron/health adapters and OpenTelemetry — standard library only.
+    link: /shost/
+    linkText: Read the docs
+  - icon: 🔌
+    title: protogen — protobuf codegen without protoc
+    details: One Go binary that generates messages, gRPC (all streaming), gRPC-gateway and OpenAPI v3 from .proto files. No protoc, no plugins. protovalidate constraints reflected into the schema, ASP.NET-style problem+json errors.
+    link: /protogen/
     linkText: Read the docs
 ---

@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Go Libraries',
-  description: 'Documentation for sconf, sorm and srog — configuration, ORM and structured logging for Go.',
+  description: 'Documentation for sconf, sorm, srog, shost and protogen — configuration, ORM, structured logging, hosting and protobuf codegen for Go.',
   base: '/docs/',
   lastUpdated: true,
   cleanUrls: true,
@@ -16,6 +16,8 @@ export default defineConfig({
       { text: 'sconf', link: '/sconf/', activeMatch: '^/sconf/' },
       { text: 'sorm', link: '/sorm/', activeMatch: '^/sorm/' },
       { text: 'srog', link: '/srog/', activeMatch: '^/srog/' },
+      { text: 'shost', link: '/shost/', activeMatch: '^/shost/' },
+      { text: 'protogen', link: '/protogen/', activeMatch: '^/protogen/' },
     ],
 
     search: {
@@ -113,6 +115,57 @@ export default defineConfig({
         {
           text: 'Reference',
           items: [{ text: 'API Reference', link: '/srog/api' }],
+        },
+      ],
+
+      '/shost/': [
+        {
+          text: 'shost',
+          items: [
+            { text: 'Overview', link: '/shost/' },
+            { text: 'Quick Start', link: '/shost/quick-start' },
+          ],
+        },
+        {
+          text: 'Guide',
+          items: [
+            { text: 'Services and Lifecycle', link: '/shost/services' },
+            { text: 'Restart Policies', link: '/shost/restart-policies' },
+            { text: 'HTTP Services', link: '/shost/http' },
+            { text: 'Cron Jobs', link: '/shost/cron' },
+            { text: 'Health Checks', link: '/shost/health' },
+            { text: 'Environments', link: '/shost/environments' },
+            { text: 'Observability', link: '/shost/observability' },
+          ],
+        },
+        {
+          text: 'Reference',
+          items: [{ text: 'API Reference', link: '/shost/api' }],
+        },
+      ],
+
+      '/protogen/': [
+        {
+          text: 'protogen',
+          items: [
+            { text: 'Overview', link: '/protogen/' },
+            { text: 'Quick Start', link: '/protogen/quick-start' },
+          ],
+        },
+        {
+          text: 'Guide',
+          items: [
+            { text: 'Generators', link: '/protogen/generators' },
+            { text: 'Streaming', link: '/protogen/streaming' },
+            { text: 'Validation and OpenAPI', link: '/protogen/validation' },
+            { text: 'Managed Mode and Monorepos', link: '/protogen/managed-mode' },
+            { text: 'Configuration', link: '/protogen/configuration' },
+            { text: 'How It Works', link: '/protogen/how-it-works' },
+          ],
+        },
+        {
+          text: 'Reference',
+          items: [{ text: 'CLI Reference', link: '/protogen/cli' }],
         },
       ],
     },
