@@ -1,0 +1,17 @@
+{
+  "name": "projects-docs",
+  "version": "1.0.0",
+  "description": "Documentation site for sconf, sorm and srog Go libraries",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "author": "Dmitriy Vislobokov",
+  "license": "MIT",
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}
