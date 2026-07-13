@@ -30,7 +30,7 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © Dmitriy Vislobokov',
+      copyright: 'Copyright © Denis Vislobokov',
     },
 
     sidebar: {

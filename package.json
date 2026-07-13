@@ -9,7 +9,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"
   },
-  "author": "Dmitriy Vislobokov",
+  "author": "Denis Vislobokov",
   "license": "MIT",
   "devDependencies": {
     "vitepress": "^1.6.4"
