@@ -180,6 +180,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/protogen/' },
             { text: 'Quick Start', link: '/protogen/quick-start' },
+            { text: 'Scaffolding (init)', link: '/protogen/scaffolding' },
           ],
         },
         {
@@ -188,6 +189,8 @@ export default defineConfig({
             { text: 'Generators', link: '/protogen/generators' },
             { text: 'Streaming', link: '/protogen/streaming' },
             { text: 'Validation and OpenAPI', link: '/protogen/validation' },
+            { text: 'OpenAPI Annotations', link: '/protogen/openapi-annotations' },
+            { text: 'Roles and Permissions', link: '/protogen/authz' },
             { text: 'Managed Mode and Monorepos', link: '/protogen/managed-mode' },
             { text: 'Configuration', link: '/protogen/configuration' },
             { text: 'How It Works', link: '/protogen/how-it-works' },

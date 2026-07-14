@@ -53,7 +53,7 @@ features:
     linkText: Read the docs
   - icon: 🔌
     title: protogen — protobuf codegen without protoc
-    details: One Go binary that generates messages, gRPC (all streaming), gRPC-gateway and OpenAPI v3 from .proto files. No protoc, no plugins. protovalidate constraints reflected into the schema, ASP.NET-style problem+json errors.
+    details: One Go binary that generates messages, gRPC (all streaming), gRPC-gateway and OpenAPI v3 from .proto files. No protoc, no plugins. protovalidate constraints reflected into the schema, ASP.NET-style problem+json errors, per-method roles/permissions with enforcement interceptors, project scaffolding via init.
     link: /protogen/
     linkText: Read the docs
 ---

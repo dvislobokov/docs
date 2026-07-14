@@ -2,6 +2,19 @@
 
 ```txt
 protogenall [flags] <proto files | directories | globs>
+protogenall <project dir>        # a directory holding protogenall.yaml
+protogenall init [--force] [dir] # scaffold a new project
+```
+
+## Subcommands
+
+### `init`
+
+Scaffolds a ready-to-generate project: `proto/<name>/v1/<name>.proto` (with `google.api.http`, `buf.validate`, `openapi.v3` and `protogen.authz` annotations wired up) and a `protogenall.yaml`. The project name and `go_package_prefix` come from `go.mod` when present. Existing files are skipped unless `--force` is given. See [Scaffolding](./scaffolding.md).
+
+```sh
+protogenall init myapi
+protogenall myapi        # generate it
 ```
 
 ## Flags
@@ -25,6 +38,8 @@ protogenall [flags] <proto files | directories | globs>
 
 Positional arguments are files, directories (walked recursively for `*.proto`), or globs. Each is resolved to a name relative to one of the `--proto_path` roots. Inputs may also be supplied via `inputs:` in the config file.
 
+A single directory argument that contains a `protogenall.yaml` is treated as a **project root**: protogenall switches into it and generates using that config — equivalent to `cd <dir> && protogenall`.
+
 ## Bundled imports
 
 These resolve without being on `--proto_path`:
@@ -36,6 +51,9 @@ bundled imports (no --proto_path needed):
   google/api/annotations.proto
   google/api/field_behavior.proto
   google/api/http.proto
+  openapiv3/OpenAPIv3.proto
+  openapiv3/annotations.proto
+  protogen/authz/authz.proto
 ```
 
 Plus all `google/protobuf/*` well-known types.
@@ -57,15 +75,16 @@ For each generated proto (with `paths=source_relative`, mirroring the source tre
 
 ```sh
 $ protogenall --version
-protogenall v0.0.0-20260712114613-21ca0ced2c0b
+protogenall v1.0.0
 ```
 
 ## Runtime helpers
 
-Two small packages accompany the generated code (imported by your service, not produced by the generator):
+Three small packages accompany the generated code (imported by your service, not produced by the generator):
 
 - **`github.com/dvislobokov/protogen/rest`** — `ValidationInterceptor` and `ProblemErrorHandler` for ASP.NET Core-style `problem+json` validation errors. See [Validation and OpenAPI](./validation.md).
 - **`github.com/dvislobokov/protogen/grpcx`** — `Register(s)` adds server reflection and the health service in one call.
+- **`github.com/dvislobokov/protogen/authz`** — `UnaryServerInterceptor`/`StreamServerInterceptor` (and `Authorize`) enforcing `(protogen.authz.requires)` roles/permissions. See [Roles and permissions](./authz.md).
 
 ```go
 s := grpc.NewServer()

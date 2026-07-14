@@ -10,8 +10,11 @@ protogen is a single Go binary that generates protobuf **messages**, **gRPC** se
 - **gRPC-gateway in-process.** A REST↔gRPC reverse proxy (`*.pb.gw.go`) for unary and server-streaming methods, honoring `google.api.http`.
 - **OpenAPI v3 that matches reality.** Generated via [`google/gnostic`](https://github.com/google/gnostic), then enriched from your [protovalidate](https://github.com/bufbuild/protovalidate) constraints — `minLength`, `pattern`, `format`, string `enum`, `readOnly`/`writeOnly`, `required` — and a documented `400` `problem+json` response.
 - **Runtime validation, no generated validator.** protovalidate checks messages via reflection at runtime; the constraints ride along in the descriptors.
-- **Bundled well-known imports.** `google/api/*` (incl. `field_behavior`) and `buf/validate/*` are embedded in the binary — no vendoring, no `--proto_path` for them.
+- **OpenAPI annotations in the proto.** `openapi.v3.document/operation/schema/property` options set document info, operation summaries/tags, and schema overrides right where the API is defined.
+- **Roles & permissions per method.** Annotate RPCs with `(protogen.authz.requires)` (`any_of`/`all_of`/`none_of` rules) and enforce them with the bundled gRPC interceptors — failures map to 401/403 through the gateway.
+- **Bundled well-known imports.** `google/api/*` (incl. `field_behavior`), `buf/validate/*`, `openapiv3/*` and `protogen/authz/*` are embedded in the binary — no vendoring, no `--proto_path` for them.
 - **Managed mode & monorepos.** Synthesizes `go_package`/`package` when your protos omit them, and generates a whole directory tree (or glob) in one call.
+- **Project scaffolding.** `protogenall init` writes a starter proto (with all annotations wired up) and a config; after that a bare `protogenall` — or `protogenall <dir>` — generates everything.
 
 ## Installation
 
@@ -21,6 +24,15 @@ protogenall --version
 ```
 
 Requires Go 1.25 or newer.
+
+## The fastest start
+
+```sh
+protogenall init myapi     # starter proto + protogenall.yaml
+protogenall myapi          # → myapi/gen/… (*.pb.go, *_grpc.pb.go, *.pb.gw.go, openapi.yaml)
+```
+
+See [Scaffolding](./scaffolding.md) for what `init` creates.
 
 ## A minimal example
 
@@ -75,13 +87,17 @@ generating:
 | `internal/gateway/httprule` | vendored path-template compiler (the one grpc-gateway keeps `internal`) |
 | `rest` | runtime helper: ASP.NET Core-style `problem+json` validation errors for the gateway |
 | `grpcx` | runtime helper: one-call server reflection + health service |
+| `authz` | runtime helper: interceptors enforcing `(protogen.authz.requires)` roles/permissions |
 
 ## Where to go next
 
 - [Quick start](./quick-start.md) — from a `.proto` to a running, validated REST+gRPC service.
+- [Scaffolding](./scaffolding.md) — `protogenall init` and the zero-flag workflow.
 - [Generators](./generators.md) — what each output file contains and how to select them.
 - [Streaming](./streaming.md) — the four RPC kinds and gateway server-streaming.
 - [Validation and OpenAPI](./validation.md) — protovalidate constraints reflected into the schema, and `problem+json` errors.
+- [OpenAPI annotations](./openapi-annotations.md) — document/operation/schema metadata from `openapi.v3.*` options.
+- [Roles and permissions](./authz.md) — `protogen.authz` annotations and the enforcement interceptors.
 - [Managed mode and monorepos](./managed-mode.md) — `go_package` synthesis and batch generation.
 - [Configuration](./configuration.md) — `protogenall.yaml` and every CLI flag.
 - [How it works](./how-it-works.md) — the no-`protoc` pipeline and the one tricky bit.

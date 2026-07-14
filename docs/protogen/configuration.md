@@ -30,9 +30,15 @@ Run it:
 protogenall --config protogenall.yaml
 # or, if it sits in the CWD:
 protogenall
+# or point at the project directory that holds it:
+protogenall path/to/project
 ```
 
 Unknown keys are rejected, so typos fail fast rather than being silently ignored.
+
+::: tip
+`protogenall init` scaffolds this file (plus a starter proto) for you — see [Scaffolding](./scaffolding.md).
+:::
 
 ## Precedence
 
