@@ -1,6 +1,6 @@
 # Go Libraries Documentation
 
-Documentation portal for [sconf](https://github.com/dvislobokov/sconf), [sorm](https://github.com/dvislobokov/sorm) and [srog](https://github.com/dvislobokov/srog), built with [VitePress](https://vitepress.dev/).
+Documentation portal for [sconf](https://github.com/dvislobokov/sconf), [sorm](https://github.com/dvislobokov/sorm), [srog](https://github.com/dvislobokov/srog), [shost](https://github.com/dvislobokov/shost), [smsg](https://github.com/dvislobokov/smsg) and [protogen](https://github.com/dvislobokov/protogen), built with [VitePress](https://vitepress.dev/).
 
 ## Development
 

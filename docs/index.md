@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "Go Libraries"
-  text: "Config. ORM. Logging. Hosting. Codegen."
-  tagline: Production-grade building blocks for Go services — layered configuration, a real Unit of Work ORM, Serilog-style structured logging, a hosting framework, and a protoc-free protobuf generator.
+  text: "Config. ORM. Logging. Hosting. Messaging. Codegen."
+  tagline: Production-grade building blocks for Go services — layered configuration, a real Unit of Work ORM, Serilog-style structured logging, a hosting framework, a typed messaging bus, and a protoc-free protobuf generator.
   actions:
     - theme: brand
       text: Get Started with sconf
@@ -18,6 +18,9 @@ hero:
     - theme: alt
       text: shost
       link: /shost/
+    - theme: alt
+      text: smsg
+      link: /smsg/
     - theme: alt
       text: protogen
       link: /protogen/
@@ -42,6 +45,11 @@ features:
     title: shost — hosting framework
     details: Microsoft.Extensions.Hosting for Go. Ordered startup, graceful shutdown with a deadline, restart supervision, readiness gating, HTTP/cron/health adapters and OpenTelemetry — standard library only.
     link: /shost/
+    linkText: Read the docs
+  - icon: 📨
+    title: smsg — typed messaging bus
+    details: MassTransit for Go. Typed consumers, envelopes with ids and headers, in-process retry with backoff, dead-lettering — over RabbitMQ, Kafka (franz-go) or fully in-memory in tests. Stdlib-only core.
+    link: /smsg/
     linkText: Read the docs
   - icon: 🔌
     title: protogen — protobuf codegen without protoc

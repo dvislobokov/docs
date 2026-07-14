@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Go Libraries',
-  description: 'Documentation for sconf, sorm, srog, shost and protogen — configuration, ORM, structured logging, hosting and protobuf codegen for Go.',
+  description: 'Documentation for sconf, sorm, srog, shost, smsg and protogen — configuration, ORM, structured logging, hosting, messaging and protobuf codegen for Go.',
   base: '/docs/',
   lastUpdated: true,
   cleanUrls: true,
@@ -17,6 +17,7 @@ export default defineConfig({
       { text: 'sorm', link: '/sorm/', activeMatch: '^/sorm/' },
       { text: 'srog', link: '/srog/', activeMatch: '^/srog/' },
       { text: 'shost', link: '/shost/', activeMatch: '^/shost/' },
+      { text: 'smsg', link: '/smsg/', activeMatch: '^/smsg/' },
       { text: 'protogen', link: '/protogen/', activeMatch: '^/protogen/' },
     ],
 
@@ -144,6 +145,32 @@ export default defineConfig({
         {
           text: 'Reference',
           items: [{ text: 'API Reference', link: '/shost/api' }],
+        },
+      ],
+
+      '/smsg/': [
+        {
+          text: 'smsg',
+          items: [
+            { text: 'Overview', link: '/smsg/' },
+            { text: 'Quick Start', link: '/smsg/quick-start' },
+          ],
+        },
+        {
+          text: 'Guide',
+          items: [
+            { text: 'Consumers', link: '/smsg/consumers' },
+            { text: 'Publishing', link: '/smsg/publishing' },
+            { text: 'Retry and Dead-Lettering', link: '/smsg/retry-dlq' },
+            { text: 'RabbitMQ Transport', link: '/smsg/rabbit' },
+            { text: 'Kafka Transport', link: '/smsg/kafka' },
+            { text: 'Testing', link: '/smsg/testing' },
+            { text: 'Observability', link: '/smsg/observability' },
+          ],
+        },
+        {
+          text: 'Reference',
+          items: [{ text: 'API Reference', link: '/smsg/api' }],
         },
       ],
 
