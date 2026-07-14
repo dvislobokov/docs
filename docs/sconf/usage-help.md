@@ -24,6 +24,49 @@ Recognized help flags (checked by `sconf.HelpRequested`):
 
 Passing `nil` as `args` disables both the help check and the command-line layer.
 
+## `--help --format` — machine-readable help {#help-format}
+
+Next to any help flag you can pass `--format table|env|json|yaml|toml` (or `--format=env`):
+
+- `table` (or no `--format`) — the human-readable listing shown below, identical to `Usage[T]()`.
+- `env` — a ready-to-fill `.env` template: a comment line per key (`# <description> (<type>[, one of a|b][, default "x"])`) followed by `NAME=<default>`. Variable names use the builder's environment prefix and `__` notation (slice placeholders render as `SERVERS__N__HOST`); a field with an [`env:"NAME"` tag](./environment-variables.md#binding-one-field-to-a-named-variable) renders as its exact name, without prefix.
+- `json` / `yaml` / `toml` — the schema as structured entries with `key`, `env`, `type`, `default`, `enum`, and `description` fields (TOML wraps them in an `[[options]]` array).
+
+```sh
+go run . --help --format env
+```
+
+```txt
+# SMTP relay endpoint (string, default "https://mail.example.com")
+APP_ENDPOINT=https://mail.example.com
+# delivery mode (string, one of digest|instant, default "instant")
+APP_MODE=instant
+```
+
+The environment prefix is taken from the first `AddEnvironmentVariables` provider in the builder (empty when there is none). An unknown format is an error — `Load` returns `config: unknown help format "..." (want table|env|json|yaml|toml)` (not `ErrHelp`) and prints nothing.
+
+Programmatically the same output comes from `UsageFormat`:
+
+```go
+out, err := sconf.UsageFormat[Config]("env", "APP_")
+```
+
+## `UsageHandler[T]` — the schema as an HTTP endpoint
+
+`UsageHandler[T](envPrefix)` serves the same schema over HTTP — a standard `http.Handler`, so it plugs into any router:
+
+```go
+mux.Handle("/config/usage", sconf.UsageHandler[Config]("APP_"))       // net/http
+r.GET("/config/usage", gin.WrapH(sconf.UsageHandler[Config]("APP_"))) // gin
+e.GET("/config/usage", echo.WrapHandler(sconf.UsageHandler[Config]("APP_")))
+```
+
+```sh
+curl localhost:8080/config/usage?format=env
+```
+
+The `format` query parameter selects the output (the same five formats, `table` by default); the response is always bare `text/plain`. `envPrefix` plays the same role as in `UsageFormat`. Only the *schema* is served — keys, types, defaults, enums, descriptions — no configuration values leave the process. An unknown format returns `400`; methods other than GET/HEAD return `405`.
+
 ## Example
 
 A notification dispatcher:
@@ -61,6 +104,7 @@ Points to note, all visible above:
 - Enums render as `{a|b}`, defaults as `(default "...")`, and the text comes from `description` (or `usage` when `description` is absent).
 - `time.Duration` renders as `duration`, `time.Time` as `datetime`, slices as `[]<type>`.
 - Nested structs are flattened into their leaf keys. For a slice of structs the placeholder key is `parent:N:field`; for a map of structs it is `parent:<key>:field`.
+- A field with an `env:"NAME"` tag additionally shows `(env NAME)` after its default.
 
 ## `Usage[T]` — the help text as a string
 
@@ -75,7 +119,7 @@ fmt.Print(sconf.Usage[Config]())
 `Describe[T]` returns the same information as structured data — one `UsageEntry` per leaf key:
 
 ```go
-type UsageEntry = bind.Entry // Key, Type, Default, HasDefault, Enum, Description
+type UsageEntry = bind.Entry // Key, Type, Default, HasDefault, Enum, Description, EnvVar
 
 for _, e := range sconf.Describe[Config]() {
 	fmt.Printf("key=%-15s type=%-8s default=%-25q enum=%v\n",

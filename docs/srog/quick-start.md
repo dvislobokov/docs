@@ -12,7 +12,7 @@ log := srog.MustNew()                      // JSON to stdout, Information level
 log := srog.NewConsole()                   // dev preset: console, Debug level, stack traces
 ```
 
-Call `log.Close()` on shutdown when file or async sinks are configured; it releases file handles and drains async queues.
+Call `log.Close()` on shutdown when file, async, or network sinks are configured; it releases file handles, drains async queues, and flushes/closes writers that came from registered sink types (such as the `otlp` sink).
 
 ## Log at each level
 

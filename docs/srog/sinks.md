@@ -145,3 +145,5 @@ var buf bytes.Buffer
 log := srog.MustNew(srog.WithWriter(&buf))                 // JSON into a buffer
 errLog := srog.MustNew(srog.WithWriter(os.Stderr, srog.AsConsole())) // console on stderr
 ```
+
+If the writer implements `io.Closer`, `Logger.Close` closes it — network sinks use this to flush on shutdown. To make a custom destination available in JSON/YAML config files as well, register it as a [sink type](./configuration.md#registered-sink-types).

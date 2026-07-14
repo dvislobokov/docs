@@ -9,7 +9,7 @@ func Load[T any](b *Builder, args []string) (*T, error)
 func LoadContext[T any](ctx context.Context, b *Builder, args []string) (*T, error)
 ```
 
-`Load` calls `LoadContext` with `context.Background()`. The context bounds the initial Vault requests and the lifetime of the background secret refresh (cancelling it stops the refresh goroutines); the binder itself is synchronous. If `args` contains a help flag, usage is printed to stdout and `ErrHelp` is returned; if `args` is non-empty, it is appended as the highest-priority command-line layer.
+`Load` calls `LoadContext` with `context.Background()`. The context bounds the initial Vault requests and the lifetime of the background secret refresh (cancelling it stops the refresh goroutines); the binder itself is synchronous. If `args` contains a help flag, usage is printed to stdout and `ErrHelp` is returned. `Load` then layers two things on top of the builder's providers: values of environment variables named by [`env:"NAME"` tags](./environment-variables.md#binding-one-field-to-a-named-variable), and — when `args` is non-empty — the command-line layer, which has the highest priority.
 
 The lower-level `bind.Bind(m, prefix, target)` exists for advanced use, but it takes the internal flat map, so in practice you always go through `Load`.
 
@@ -27,6 +27,7 @@ The key for a field is taken from the first present tag among `json`, `yaml`, `t
 | `default` | Fallback value, applied when no source provides the key. Parsed like any other value. |
 | `enum` | Comma-separated allowed values. Matched case-insensitively; the bound value is canonicalized to the spelling in the list. Violations return `ErrEnum`. |
 | `description` / `usage` | Human-readable text for [generated help](./usage-help.md). `description` wins if both are present. |
+| `env` | Binds the field to one exact environment variable (no prefix, no `__` convention). Read by `Load`/`LoadContext` only; see [Environment variables](./environment-variables.md#binding-one-field-to-a-named-variable). |
 
 Additional skip rules: unexported fields are always ignored, and matching is case-insensitive (a YAML key `Name` binds a field keyed `name`).
 

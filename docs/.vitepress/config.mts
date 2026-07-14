@@ -132,10 +132,13 @@ export default defineConfig({
             { text: 'Services and Lifecycle', link: '/shost/services' },
             { text: 'Restart Policies', link: '/shost/restart-policies' },
             { text: 'HTTP Services', link: '/shost/http' },
+            { text: 'gRPC and grpc-gateway', link: '/shost/grpc' },
             { text: 'Cron Jobs', link: '/shost/cron' },
             { text: 'Health Checks', link: '/shost/health' },
             { text: 'Environments', link: '/shost/environments' },
+            { text: 'Running as a Daemon', link: '/shost/daemons' },
             { text: 'Observability', link: '/shost/observability' },
+            { text: 'Testing', link: '/shost/testing' },
           ],
         },
         {

@@ -1,6 +1,6 @@
 # Advanced
 
-This page covers the extension points: custom value parsing with `Unmarshaler`, self-validation with `Validator`, ad-hoc access to the merged tree without a struct, and writing your own provider. All examples come from one verified program — a video-transcoding farm.
+This page covers the extension points: custom value parsing with `Unmarshaler`, self-validation with `Validator`, ad-hoc access to the merged tree without a struct, dumping the merged configuration, and writing your own provider. All examples come from one verified program — a video-transcoding farm.
 
 ## Custom parsing with `Unmarshaler`
 
@@ -112,9 +112,57 @@ section codec=h264 children=[codec threads]
 | `Section(key) *Config` | A view restricted to the key prefix. It shares the underlying data with the parent — no copying. |
 | `GetChildren(key) []string` | Immediate child segment names, normalized (lower case) and sorted. Empty `key` lists children of the current section. |
 
+## Dumping the merged configuration {#dumping-the-merged-configuration}
+
+`Dump` renders the *final merged* configuration — all layers applied — in one of five formats. Invaluable for debugging precedence questions ("which layer won?") and for generating deployment templates.
+
+```go
+type DumpFormat string
+
+const (
+	DumpKeys DumpFormat = "keys" // flat "key = value" lines
+	DumpEnv  DumpFormat = "env"  // KEY__SUB=value lines
+	DumpJSON DumpFormat = "json"
+	DumpYAML DumpFormat = "yaml"
+	DumpTOML DumpFormat = "toml"
+)
+
+func Dump[T any](cfg *Config, format DumpFormat, opts ...DumpOption) (string, error)
+func DumpValues(cfg *Config, format DumpFormat, opts ...DumpOption) (string, error)
+
+func WithDumpEnvPrefix(prefix string) DumpOption
+func WithDumpRedact(keys ...string) DumpOption
+```
+
+The type parameter `T` is your config struct: its `description`/`usage` tags become `#` comment lines above keys in the `keys` and `env` formats (slice elements match their schema key, so `servers:0:host` gets the description of `servers:N:host`). `DumpValues` is `Dump[struct{}]` — the same output without descriptions.
+
+```go
+out, _ := sconf.Dump[Settings](cfg, sconf.DumpKeys)
+// # db host
+// database:host = db.local
+// database:port = 5432
+
+out, _ = sconf.Dump[Settings](cfg, sconf.DumpEnv, sconf.WithDumpEnvPrefix("APP_"))
+// # db host
+// APP_DATABASE__HOST=db.local
+// APP_DATABASE__PORT=5432
+```
+
+Format details:
+
+- All values print as strings (the internal model); keys are sorted alphabetically.
+- `env` output is round-trippable: it loads back through `AddDotEnvFile` or `AddEnvironmentVariables`. Names are uppercased with `:` → `__` plus the `WithDumpEnvPrefix` prefix; a field with an `env:"NAME"` tag prints as `NAME=...` verbatim, without prefix. Values containing spaces, quotes, `#`, or `\` are quoted.
+- `json`/`yaml`/`toml` un-flatten the map into a nested document (nodes whose children are all non-negative integers become arrays); data only, no comments.
+- On a `cfg.Section("database")` view, only that section's keys print, with the prefix stripped.
+- An unknown format errors: `config: unknown dump format "..."`.
+
+::: warning Redacting secrets
+Secret *fields* hold Vault paths, which are safe to print — but an `AddVaultKV` layer puts real secret values into the tree. `WithDumpRedact("database:password", "tokens")` masks the listed keys **and everything under them** as `***` (case-insensitive).
+:::
+
 ## Writing a custom provider
 
-A provider only needs `Load() (map[string]string, error)` returning flat pairs (use `:` as the separator, or apply the `__` convention yourself). Here is a complete dotenv-style provider:
+A provider only needs `Load() (map[string]string, error)` returning flat pairs (use `:` as the separator, or apply the `__` convention yourself). Here is a complete dotenv-style provider (note: since the `.env` provider became [built-in](./providers.md#env-files), you'd reach for `AddDotEnvFile` in real code — this remains a good illustration of the interface):
 
 ```go
 // dotenvProvider is a custom sconf.Provider: it reads KEY=VALUE lines from a

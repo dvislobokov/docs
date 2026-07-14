@@ -8,8 +8,10 @@ sconf is a layered configuration library for Go modeled after `Microsoft.Extensi
 - **Layering with per-key precedence.** Sources added later win, key by key, not file by file.
 - **Arrays of objects from environment variables** using the `__` → `:` convention — a capability the flat model gives you for free (and one that viper's per-source merge model does not provide; viper cannot override one element of an array from an env var, since `BindEnv` operates on whole keys of unflattened trees).
 - **Typed binding via generics.** One entry point, `sconf.Load[T]`, returns `*T` with defaults, enum validation, `time.Duration`/`time.Time` parsing, pointers, maps, slices, and embedded structs handled.
-- **Auto-generated `--help`** from your struct tags, plus programmatic access via `Describe[T]`.
-- **Secrets from HashiCorp Vault** built in: declare a field as `secret.UserPass`, `secret.Cert`, `secret.KV`, or `secret.Value`, keep only the *path* in your config file, and the values are fetched at load time and refreshed in the background automatically.
+- **Auto-generated `--help`** from your struct tags — human-readable or machine-readable (`--help --format env|json|yaml|toml`), as an HTTP endpoint (`UsageHandler`), and programmatically via `Describe[T]`.
+- **Secrets from HashiCorp Vault** built in: declare a field as `secret.UserPass`, `secret.Cert`, `secret.KV`, or `secret.Value`, keep only the *path* in your config file, and the values are fetched at load time and refreshed in the background automatically. `VAULT_WAIT` rides out a Vault that isn't reachable yet at startup (istio sidecars, sealed nodes).
+- **`.env` files** as a first-class layer (`AddDotEnvFile`) with environment-variable semantics, and the `env:"NAME"` tag to bind a field to one exact variable.
+- **Config dumping** — print the final merged configuration in flat, env, JSON, YAML, or TOML form, with secret redaction.
 - **Operational niceties:** optional files, waiting for files to appear on disk (Vault sidecar / init containers), and typed sentinel errors.
 
 ## Installation
@@ -18,7 +20,7 @@ sconf is a layered configuration library for Go modeled after `Microsoft.Extensi
 go get github.com/dvislobokov/sconf
 ```
 
-Requires Go 1.24 or newer (v1.1.0+). The Vault integration is part of the core package — if your config has no secret fields, Vault is simply never contacted.
+Requires Go 1.21 or newer (the floor is set by dependencies). The Vault integration is part of the core package — if your config has no secret fields, Vault is simply never contacted.
 
 ## A minimal example
 
@@ -79,8 +81,8 @@ The value of `workers` came from the environment, `limits:process_timeout` from 
 
 | Package | Contents |
 |---|---|
-| `sconf` | `Builder`, `Config`, `Load[T]`, `Usage[T]`, sentinel errors, option re-exports |
-| `sconf/provider` | `JSONFile`, `YAMLFile`, `TOMLFile`, `Env`, `Args`, `Map`, file options |
+| `sconf` | `Builder`, `Config`, `Load[T]`, `Usage[T]`, `Dump[T]`, sentinel errors, option re-exports |
+| `sconf/provider` | `JSONFile`, `YAMLFile`, `TOMLFile`, `DotEnvFile`, `Env`, `Args`, `Map`, file options |
 | `sconf/bind` | reflection binder, `Unmarshaler` / `Validator` hooks, `Describe` / `Usage` |
 | `sconf/secret` | secret field types (`UserPass`, `Cert`, `KV`, `Value`) — standard library only |
 | `sconf/internal/vault` | Vault client internals — used by the core, not imported directly |

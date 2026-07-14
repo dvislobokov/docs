@@ -1,6 +1,6 @@
 # Integrations
 
-srog ships first-party integrations for HTTP servers, gRPC, the Echo framework, Elasticsearch, and OpenTelemetry, plus ECS and OTLP output formats for log pipelines. `sroghttp` lives in the main module; the others are separate Go modules fetched with `go get github.com/dvislobokov/srog/<name>`.
+srog ships first-party integrations for HTTP servers, gRPC, the Echo framework, Elasticsearch, and OpenTelemetry (trace correlation *and* direct log export to the Collector), plus ECS and OTLP output formats for log pipelines. `sroghttp` lives in the main module; the others are separate Go modules fetched with `go get github.com/dvislobokov/srog/<name>`.
 
 ## net/http (sroghttp)
 
@@ -163,6 +163,8 @@ Captured:
 
 Severity mapping: trace→1/TRACE, debug→5/DEBUG, info→9/INFO, warn→13/WARN, error→17/ERROR, fatal→21/FATAL. Integers are emitted as decimal strings under `intValue` per the proto3 JSON mapping; attributes are sorted by key for stable output.
 
+`AsOTel()` is a passive format — it writes OTLP/JSON lines to whatever writer the sink has, for tail-and-ship pipelines. To *push* logs to a Collector directly over OTLP with batching and retries, use [`srogotel.Sink`](#otlp-export-to-the-collector-srogotel) below.
+
 ## OpenTelemetry correlation (srogotel)
 
 `go get github.com/dvislobokov/srog/srogotel`
@@ -187,3 +189,84 @@ Captured with a real SDK span active:
 ```
 
 `srogotel.Fields` is the underlying `srog.ContextFieldFunc` if you prefer to register it yourself. When these fields are present, the `AsOTel()` format promotes them to the record's `traceId`/`spanId`.
+
+## OTLP export to the Collector (srogotel) {#otlp-export-to-the-collector-srogotel}
+
+Since v1.1.0 the same `srogotel` module also *exports* logs: `srogotel.Sink` translates each srog event into an OpenTelemetry `LogRecord` through the [Logs Bridge API](https://opentelemetry.io/docs/specs/otel/logs/bridge-api/) and emits it via a `log.LoggerProvider` — either the process-global one you already configured next to traces and metrics, or a private OTLP exporter (gRPC or HTTP) owned by the sink.
+
+```go
+type Config struct {
+	Provider   log.LoggerProvider // reuse a specific provider (never shut down by the sink)
+	Endpoint   string             // host:port, no scheme — builds a private OTLP exporter
+	Protocol   string             // "grpc" (default) or "http"
+	Insecure   bool               // disable TLS (private exporter)
+	Headers    map[string]string  // added to every export request
+	Timeout    time.Duration      // exporter default when zero
+	Resource   *resource.Resource // resource for the private provider
+	Attributes map[string]string  // static attributes stamped on every record
+	ScopeName  string             // instrumentation scope (default "github.com/dvislobokov/srog")
+	TimeFormat string             // how to parse the event's "time" field
+	OnError    func(error)        // reports untranslatable events (must not log through this sink)
+}
+
+func NewSink(ctx context.Context, cfg Config) (*Sink, error)           // io.WriteCloser
+func WithLogs(ctx context.Context, cfg Config, opts ...srog.SinkOption) (srog.Option, *Sink, error)
+```
+
+The zero-value `Config` is valid — it emits through the global `LoggerProvider`. Setting `Endpoint` instead builds a private OTLP exporter with a batching processor; that provider is owned by the sink, and `Close()` flushes and shuts it down (10 s timeout). `Provider` and `Endpoint` are mutually exclusive. `Close` on a global/borrowed provider is a no-op.
+
+```go
+// Reuse the global LoggerProvider configured next to traces/metrics:
+opt, sink, err := srogotel.WithLogs(ctx, srogotel.Config{})
+
+// ...or a private OTLP exporter:
+opt, sink, err := srogotel.WithLogs(ctx, srogotel.Config{
+	Endpoint: "collector:4317",
+	Protocol: "grpc",
+	Insecure: true,
+	Headers:  map[string]string{"authorization": "Bearer ..."},
+})
+if err != nil {
+	panic(err)
+}
+defer sink.Close()
+
+log := srog.MustNew(srog.WithConsole(), opt)
+```
+
+`WithLogs` is `NewSink` + `srog.WithWriter(sink, srog.AsJSON(), opts...)`; extra sink options such as `srog.MinLevel` or `srog.Async` compose, but don't override the format — the sink parses srog's JSON events. Untranslatable input is dropped and reported via `OnError`; `Write` never fails the logger.
+
+Field mapping follows the OTel Logs Data Model: `time` → Timestamp (parsed per `TimeFormat`, friendly srog names and unix-epoch variants included), `level` → Severity/SeverityText (same ladder as `AsOTel()`), `message` → Body, `trace_id`/`span_id` → the record's trace context, `error` → `exception.message`, `stack` → `exception.stacktrace`, `caller` → `code.filepath` + `code.lineno`, `@mt` → `log.template`, and everything else becomes a typed attribute. `Config.Attributes` are stamped on every record (an event field with the same name wins) — useful for Collector routing hints like `data_stream.dataset`.
+
+### The `otlp` sink type in config
+
+Importing `srogotel` (a blank import suffices) registers `"otlp"` as a [config sink type](./configuration.md#registered-sink-types):
+
+```go
+import _ "github.com/dvislobokov/srog/srogotel"
+```
+
+```json
+{
+  "sinks": [
+    { "type": "otlp" },
+    {
+      "type": "otlp",
+      "level": "warning",
+      "options": {
+        "endpoint": "collector:4317",
+        "protocol": "grpc",
+        "insecure": true,
+        "headers": { "authorization": "Bearer ..." },
+        "timeout": "10s",
+        "scopeName": "my-service",
+        "attributes": { "data_stream.dataset": "billing" }
+      }
+    }
+  ]
+}
+```
+
+All options are optional: an empty `options` (or none) uses the global provider, `endpoint` switches to a private exporter. `timeFormat` inside `options` overrides the logger-wide `timeFormat`, which is otherwise inherited. There is no `provider` key — passing a specific `log.LoggerProvider` is Go-API-only. Leave the entry's `format` at its default; because the sink is an `io.Closer`, `Logger.Close` flushes it.
+
+When to use what: `AsOTel()` writes OTLP/JSON to a file for a tail-based pipeline (Collector `otlpjson` receiver, Fluent Bit); `srogotel.Sink` / the `otlp` type pushes directly to the Collector with batching, retries, and native trace context. A runnable example lives in `examples/otel-logs` in the srog repository.

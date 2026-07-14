@@ -32,7 +32,7 @@ host := shost.New().
 	MustBuild()
 ```
 
-Multiple observers run in registration order — compose an OpenTelemetry observer with your own ad-hoc one.
+Multiple observers run in registration order — compose an OpenTelemetry observer with your own ad-hoc one. In tests, [`shosttest.NewRecorder()`](./testing.md#recording-lifecycle-events) provides a ready-made Observer that records events for assertions.
 
 ## OpenTelemetry module
 

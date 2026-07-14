@@ -13,7 +13,7 @@ func Load[T any](b *Builder, args []string, opts ...LoadOption) (*T, error)
 func LoadContext[T any](ctx context.Context, b *Builder, args []string, opts ...LoadOption) (*T, error)
 ```
 
-The main entry point. In order: prints usage and returns `ErrHelp` if `args` contains a help flag; appends `args` as the highest-priority command-line layer (when non-empty); builds the merged configuration; binds it into a new `*T`; resolves secret fields from Vault; starts background refresh for every refreshable secret. `args` is usually `os.Args[1:]`; pass `nil` to skip both the CLI layer and the help check.
+The main entry point. In order: prints usage and returns `ErrHelp` if `args` contains a help flag (honoring `--help --format ...`; an unknown format returns a non-`ErrHelp` error instead); layers the values of environment variables named by `env:"NAME"` tags above the builder's providers; appends `args` as the highest-priority command-line layer (when non-empty); builds the merged configuration; binds it into a new `*T`; resolves secret fields from Vault; starts background refresh for every refreshable secret. `args` is usually `os.Args[1:]`; pass `nil` to skip both the CLI layer and the help check.
 
 The context passed to `LoadContext` bounds both the initial Vault requests and the **lifetime of the background refresh**: cancelling it stops the refresh goroutines. `Load` uses `context.Background()`, so secrets are refreshed for the lifetime of the process — nothing to stop or manage.
 
@@ -36,6 +36,7 @@ func (b *Builder) Add(p Provider) *Builder
 func (b *Builder) AddJSONFile(path string, opts ...FileOption) *Builder
 func (b *Builder) AddYAMLFile(path string, opts ...FileOption) *Builder
 func (b *Builder) AddTOMLFile(path string, opts ...FileOption) *Builder
+func (b *Builder) AddDotEnvFile(path, prefix string, opts ...FileOption) *Builder
 func (b *Builder) AddEnvironmentVariables(prefix string) *Builder
 func (b *Builder) AddCommandLine(args []string) *Builder
 func (b *Builder) AddInMemory(values map[string]string) *Builder
@@ -45,6 +46,8 @@ func (b *Builder) Build() (*Config, error)
 ```
 
 Collects providers in order; `Build` loads each one and merges the results last-wins per key. All `Add*` methods return the builder for chaining.
+
+`AddDotEnvFile` reads `KEY=VALUE` lines and treats them like environment variables (prefix stripped, `__` → `:`) without touching the process environment; it accepts the same `FileOption`s as the other file providers. See [.env files](./providers.md#env-files).
 
 `AddVaultKV` layers the fields of one Vault KV secret into the configuration tree (full path; the KV v2 `data`/`metadata` envelope is unwrapped, nested objects and lists flatten like any other source). `AddVaultKVAt` places the fields under a section prefix instead of the root. Connection settings come from the same environment variables as secret fields, and `VAULT_SECRETS_FILE` is honored for local development. See [Vault secrets](./vault.md#the-vault-kv-configuration-layer).
 
@@ -78,13 +81,39 @@ Any configuration source. Returns flat `path → value` pairs with `:` as the se
 
 ```go
 func Usage[T any]() string
+func UsageFormat[T any](format, envPrefix string) (string, error)
+func UsageHandler[T any](envPrefix string) http.Handler
 func Describe[T any]() []UsageEntry
 func HelpRequested(args []string) bool
 
 type UsageEntry = bind.Entry
 ```
 
-`Usage` renders human-readable help from `T`'s fields and tags (keys shown as `--section:key`). `Describe` returns the same data structured. `HelpRequested` reports whether `args` contains `-h`, `--h`, `-help`, `--help`, `-?`, `/?`, `/help`, or `/h`. See [Usage and help](./usage-help.md).
+`Usage` renders human-readable help from `T`'s fields and tags (keys shown as `--section:key`). `UsageFormat` renders the same schema in one of `table`, `env`, `json`, `yaml`, `toml` — the machinery behind `--help --format`; `envPrefix` names variables in the `env` format. `UsageHandler` serves the schema over HTTP (`?format=...`, plain text, schema only — no values). `Describe` returns the same data structured. `HelpRequested` reports whether `args` contains `-h`, `--h`, `-help`, `--help`, `-?`, `/?`, `/help`, or `/h`. See [Usage and help](./usage-help.md).
+
+### Dumping
+
+```go
+type DumpFormat string
+
+const (
+	DumpKeys DumpFormat = "keys"
+	DumpEnv  DumpFormat = "env"
+	DumpJSON DumpFormat = "json"
+	DumpYAML DumpFormat = "yaml"
+	DumpTOML DumpFormat = "toml"
+)
+
+type DumpOption func(*dumpOptions)
+
+func WithDumpEnvPrefix(prefix string) DumpOption
+func WithDumpRedact(keys ...string) DumpOption
+
+func Dump[T any](cfg *Config, format DumpFormat, opts ...DumpOption) (string, error)
+func DumpValues(cfg *Config, format DumpFormat, opts ...DumpOption) (string, error)
+```
+
+Render the final merged configuration; `T`'s `description`/`usage` tags become comments in the `keys`/`env` formats, `DumpValues` omits them. `WithDumpRedact` masks keys (and their subtrees) as `***`. See [Advanced](./advanced.md#dumping-the-merged-configuration).
 
 ### Secrets and background refresh
 
@@ -95,11 +124,15 @@ type LoadOption func(*loadOptions)
 
 func WithSecretErrorHandler(fn func(error)) LoadOption
 func WithSecretRetryBackoff(d time.Duration) LoadOption
+func WithVaultWait(timeout time.Duration) LoadOption
+func WithVaultWaitInterval(d time.Duration) LoadOption
 ```
 
 Vault support is built in: `Load` fills every field implementing `secret.Resolvable` after binding and starts their background refresh — no imports or registration required. If the target has no secret fields, Vault is never contacted. If secret fields exist but the environment is not configured, `Load` fails with an error wrapping `ErrVaultNotConfigured`.
 
 Refresh errors are silently swallowed by default (the previous value is kept); `WithSecretErrorHandler` observes them. `WithSecretRetryBackoff` sets the pause before retrying a failed refresh (default 30 s).
+
+`WithVaultWait` gives the *initial* secret resolution a budget during which transient errors (network, HTTP 429/502/503/504) are retried; `WithVaultWaitInterval` sets the pause between attempts (default 2 s). The `VAULT_WAIT` / `VAULT_WAIT_INTERVAL` environment variables override the options and are the only way to enable waiting for `AddVaultKV` layers. See [Waiting for Vault at startup](./vault.md#waiting-for-vault-at-startup).
 
 ### Errors and aliases
 
@@ -131,9 +164,10 @@ The built-in sources. Each returns flat pairs; keys keep their original casing (
 func JSONFile(path string, opts ...FileOption) *fileProvider
 func YAMLFile(path string, opts ...FileOption) *fileProvider
 func TOMLFile(path string, opts ...FileOption) *fileProvider
+func DotEnvFile(path, prefix string, opts ...FileOption) *fileProvider
 ```
 
-Parse a file and flatten the tree. JSON numbers keep their source representation (`UseNumber`); empty files yield an empty layer.
+Parse a file and flatten the tree. JSON numbers keep their source representation (`UseNumber`); empty files yield an empty layer. `DotEnvFile` parses `KEY=VALUE` lines with env-var semantics (prefix stripped, `__` → `:`); see [.env files](./providers.md#env-files).
 
 ### type FileOption
 
@@ -154,10 +188,11 @@ type EnvProvider struct{ /* unexported */ }
 
 func Env(prefix string) *EnvProvider
 func (e *EnvProvider) WithEnviron(fn func() []string) *EnvProvider
+func (e *EnvProvider) Prefix() string
 func (e *EnvProvider) Load() (map[string]string, error)
 ```
 
-Environment variables: the prefix (possibly empty) is stripped, `__` becomes `:`. `WithEnviron` substitutes the variable source — intended for tests.
+Environment variables: the prefix (possibly empty) is stripped, `__` becomes `:`. `WithEnviron` substitutes the variable source — intended for tests. `Prefix` returns the configured prefix; `Load` uses it to pick the variable names for `--help --format env`.
 
 ### type ArgsProvider
 
@@ -210,6 +245,7 @@ type Entry struct {
 	HasDefault  bool     // whether default was set
 	Enum        []string // allowed values (enum tag)
 	Description string   // description tag, falling back to usage tag
+	EnvVar      string   // explicit environment variable name (env tag)
 }
 
 func Describe(t reflect.Type) []Entry

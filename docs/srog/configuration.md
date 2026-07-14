@@ -33,13 +33,14 @@ Documented from the parser (`Config`, `SinkSpec`, `RotationSpec`). All fields ar
 
 | Key | Type | Applies to | Meaning |
 | --- | --- | --- | --- |
-| `type` | string | required | `"console"`, `"file"`, `"stdout"`, or `"stderr"` |
+| `type` | string | required | `"console"`, `"file"`, `"stdout"`, `"stderr"`, or any name registered via [`RegisterSinkType`](#registered-sink-types) (e.g. `"otlp"` once `srog/srogotel` is imported) |
 | `target` | string | `console` | Stream for a console sink: `"stdout"` (default) or `"stderr"` |
 | `path` | string | `file` (required) | File path; the parent directory must exist |
 | `level` | string | all | Per-sink minimum level (same names as `level`) |
 | `format` | string | all | `"json"`, `"console"` (alias `"text"`), `"ecs"`, or `"otel"` (aliases `"opentelemetry"`, `"otlp"`) |
 | `noColor` | bool | console format | Disable ANSI colors |
 | `rotation` | object | `file` | Rotation and retention (below) |
+| `options` | object | registered types | Type-specific settings for sinks registered via `RegisterSinkType`; built-in types ignore it |
 
 Sink type defaults: `console` formats as console; `file`, `stdout`, and `stderr` format as JSON unless `format` says otherwise.
 
@@ -54,7 +55,65 @@ Sink type defaults: `console` formats as console; `file`, `stdout`, and `stderr`
 | `localTime` | bool | Local time for backup names and boundaries (default UTC) |
 | `every` | string | `""`/`"none"`, `"hourly"`, or `"daily"` |
 
-Unknown level, format, sink type, or interval names produce a descriptive error (e.g. `srog: sinks[1]: unknown format "xml" (want json, console, ecs, or otel)`).
+Unknown level, format, or interval names produce a descriptive error (e.g. `srog: sinks[1]: unknown format "xml" (want json, console, ecs, or otel)`). A sink `type` that is neither built-in nor registered errors as well.
+
+## Registered sink types
+
+Since v1.1.0 the set of sink types is extensible: a module can register a new type name with `RegisterSinkType`, and config files can then use it like any built-in. This is the serializable counterpart of `WithWriter` — custom destinations become expressible in JSON/YAML.
+
+```go
+// SinkFactory builds the destination writer for an externally registered sink
+// type. The returned writer receives events serialized in format (unless the
+// spec's own "format" overrides it); if it also implements io.Closer it is
+// closed by Logger.Close.
+type SinkFactory func(cfg Config, spec SinkSpec) (w io.Writer, format Format, err error)
+
+func RegisterSinkType(name string, factory SinkFactory)
+
+func (s SinkSpec) DecodeOptions(v any) error // decode spec.Options into a struct
+```
+
+Rules:
+
+- Names are case-insensitive and trimmed; registering the same name again replaces the earlier factory. Registration is safe for concurrent use.
+- The built-in names `console`, `file`, `stdout`, and `stderr` always win — they cannot be shadowed by a registration.
+- The sink entry's own `level`, `format`, and `noColor` still apply on top: an explicit `format` overrides the factory's default.
+- Type-specific settings travel in the entry's `options` object; the factory reads them with `spec.DecodeOptions(&myOptions)`.
+- If the factory's writer implements `io.Closer`, `Logger.Close` closes it — this is how network sinks flush on shutdown.
+
+Modules typically register in `init()`, so a blank import enables the type. The bundled example is the [`otlp` sink](./integrations.md#otlp-export-to-the-collector-srogotel) from `srog/srogotel`:
+
+```go
+import _ "github.com/dvislobokov/srog/srogotel" // registers the "otlp" sink type
+```
+
+```json
+{
+  "sinks": [
+    { "type": "console" },
+    {
+      "type": "otlp",
+      "level": "warning",
+      "options": { "endpoint": "collector:4317", "insecure": true }
+    }
+  ]
+}
+```
+
+Writing your own:
+
+```go
+srog.RegisterSinkType("mysink", func(cfg srog.Config, spec srog.SinkSpec) (io.Writer, srog.Format, error) {
+	var o struct {
+		URL string `json:"url"`
+	}
+	if err := spec.DecodeOptions(&o); err != nil {
+		return nil, 0, err
+	}
+	w := newMyWriter(o.URL) // may implement io.Closer
+	return w, srog.FormatJSON, nil
+})
+```
 
 ## A worked example
 
@@ -104,7 +163,7 @@ Captured output — the Debug line reached only the console; the file received t
 
 ## Programmatic vs file configuration
 
-The two styles are equivalent, and they compose: `Config.Options()` translates a config into the matching `[]Option` slice, to which you can append programmatic options (useful for options that have no serializable form, such as `WithErrorHandler`, `WithSampling`, or `WithWriter`).
+The two styles are equivalent, and they compose: `Config.Options()` translates a config into the matching `[]Option` slice, to which you can append programmatic options (useful for options that have no serializable form, such as `WithErrorHandler` or `WithSampling`; custom writers can go either way — programmatically via `WithWriter`, or declaratively via a [registered sink type](#registered-sink-types)).
 
 ::: code-group
 

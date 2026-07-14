@@ -50,7 +50,7 @@ Derive enriched child loggers (see [Enrichment](./enrichment.md)).
 func (l *Logger) WithLevel(level Level) *Logger      // child with a different minimum level
 func (l *Logger) WithStackTrace(on bool) *Logger     // child with stack capture toggled
 func (l *Logger) Enabled(level Level) bool           // would events at level be emitted?
-func (l *Logger) Close() error                       // release file/async sinks (root logger only)
+func (l *Logger) Close() error                       // release file/async sinks and io.Closer writers from registered sink factories (root logger only)
 func (l *Logger) IntoContext(ctx context.Context) context.Context
 ```
 
@@ -185,13 +185,14 @@ type Config struct {
 }
 
 type SinkSpec struct {
-	Type     string        `json:"type"`               // console | file | stdout | stderr
-	Target   string        `json:"target,omitempty"`   // console: stdout | stderr
-	Path     string        `json:"path,omitempty"`     // file only
-	Level    string        `json:"level,omitempty"`
-	Format   string        `json:"format,omitempty"`   // json | console | ecs | otel
-	NoColor  bool          `json:"noColor,omitempty"`
-	Rotation *RotationSpec `json:"rotation,omitempty"`
+	Type     string         `json:"type"`               // console | file | stdout | stderr | any RegisterSinkType name
+	Target   string         `json:"target,omitempty"`   // console: stdout | stderr
+	Path     string         `json:"path,omitempty"`     // file only
+	Level    string         `json:"level,omitempty"`
+	Format   string         `json:"format,omitempty"`   // json | console | ecs | otel
+	NoColor  bool           `json:"noColor,omitempty"`
+	Rotation *RotationSpec  `json:"rotation,omitempty"`
+	Options  map[string]any `json:"options,omitempty"`  // type-specific settings for registered sink types
 }
 
 type RotationSpec struct {
@@ -211,6 +212,14 @@ func (c Config) Build() (*Logger, error)
 func (c Config) Options() ([]Option, error)
 ```
 All structs also carry `yaml` tags. See [Configuration](./configuration.md) for the full schema.
+
+```go
+type SinkFactory func(cfg Config, spec SinkSpec) (w io.Writer, format Format, err error)
+
+func RegisterSinkType(name string, factory SinkFactory) // register an external sink type name
+func (s SinkSpec) DecodeOptions(v any) error            // decode spec.Options into a tagged struct
+```
+`RegisterSinkType` makes `name` usable as a sink `type` in config files (case-insensitive; built-ins cannot be shadowed; a repeat registration replaces the factory). A writer that implements `io.Closer` is closed by `Logger.Close`. See [Registered sink types](./configuration.md#registered-sink-types).
 
 ### Context
 
@@ -344,6 +353,33 @@ func WithElasticsearch(cfg Config) (srog.Option, *Sink, error) // WithWriter(sin
 func Install()                                    // register Fields with srog.AddContextField
 func Fields(ctx context.Context) []srog.Field     // trace_id + span_id of the active span
 ```
+
+OTLP log export (v1.1.0; see [Integrations](./integrations.md#otlp-export-to-the-collector-srogotel)):
+
+```go
+type Config struct {
+	Provider   log.LoggerProvider // reuse a specific provider (mutually exclusive with Endpoint)
+	Endpoint   string             // host:port — private OTLP exporter owned by the sink
+	Protocol   string             // "grpc" (default) or "http"
+	Insecure   bool
+	Headers    map[string]string
+	Timeout    time.Duration      // exporter default when zero
+	Resource   *resource.Resource
+	Attributes map[string]string  // static attributes on every record
+	ScopeName  string             // default "github.com/dvislobokov/srog"
+	TimeFormat string
+	OnError    func(error)
+}
+
+type Sink struct{ /* io.WriteCloser */ }
+func NewSink(ctx context.Context, cfg Config) (*Sink, error)
+func (s *Sink) Write(p []byte) (int, error) // parse one srog JSON event, emit a LogRecord
+func (s *Sink) Close() error                // flush + shut down a private provider; no-op otherwise
+
+func WithLogs(ctx context.Context, cfg Config, opts ...srog.SinkOption) (srog.Option, *Sink, error)
+```
+
+Importing the package also registers the `"otlp"` sink type for config files via `srog.RegisterSinkType`.
 
 ## Field name reference
 

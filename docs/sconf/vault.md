@@ -151,8 +151,31 @@ The connection is configured entirely through environment variables:
 | `VAULT_ROLE_ID` / `VAULT_SECRET_ID` | AppRole credentials (required for `approle` auth) | — |
 | `VAULT_APPROLE_MOUNT` | AppRole auth mount | `approle` |
 | `VAULT_SECRETS_FILE` | Local secrets file — enables offline development mode | — |
+| `VAULT_WAIT` | Wait budget for Vault to become reachable at startup (Go duration) | off |
+| `VAULT_WAIT_INTERVAL` | Pause between attempts while waiting | `2s` |
 
-Missing required variables produce an error wrapping `sconf.ErrVaultNotConfigured` that names the exact variable to set.
+Missing required variables produce an error wrapping `sconf.ErrVaultNotConfigured` that names the exact variable to set. Invalid wait values are errors too: `vault: invalid VAULT_WAIT "..." : ...`.
+
+## Waiting for Vault at startup
+
+By default the initial secret resolution fails fast: the first error aborts `Load`. In environments where Vault is briefly unreachable when the process starts — most commonly behind an istio/envoy sidecar that hasn't opened egress yet, or a Vault node that is still sealed/standby — give `Load` a wait budget:
+
+```go
+cfg, err := sconf.Load[Config](builder, os.Args[1:],
+	sconf.WithVaultWait(30*time.Second),        // total wait budget
+	sconf.WithVaultWaitInterval(2*time.Second), // pause between attempts (default 2s)
+)
+```
+
+or purely through the environment (no code change): `VAULT_WAIT=30s`, `VAULT_WAIT_INTERVAL=2s`. The environment variables override the options when both are set.
+
+Only *transient* errors are retried: network errors (connection refused, DNS, timeouts) and HTTP `429`/`502`/`503`/`504`. Non-transient failures — `403`/`404`, bad credentials, `ErrVaultNotConfigured`, a cancelled context — return immediately. When the budget runs out, the error is `vault: still unavailable after waiting <timeout>: <last error>`.
+
+::: info
+For the [`AddVaultKV`/`AddVaultKVAt` layers](#the-vault-kv-configuration-layer) waiting is enabled **only** via the environment variables — the `WithVaultWait*` options apply to secret-field resolution and do not reach the KV layer.
+:::
+
+In Kubernetes with istio, `VAULT_WAIT=30s` complements `holdApplicationUntilProxyStarts: true` — the app starts once the sidecar is ready, and the wait rides out the remaining seconds before egress works.
 
 ## Local development: `VAULT_SECRETS_FILE`
 
@@ -206,7 +229,7 @@ cfg, err := sconf.Load[Config](
 
 ## Failure behavior
 
-- **Secret fields present, Vault unreachable or misconfigured** — `Load` returns an error; the application does not start with empty secrets. Check `errors.Is(err, sconf.ErrVaultNotConfigured)` for the misconfiguration case.
+- **Secret fields present, Vault unreachable or misconfigured** — `Load` returns an error; the application does not start with empty secrets. Check `errors.Is(err, sconf.ErrVaultNotConfigured)` for the misconfiguration case. With a [wait budget](#waiting-for-vault-at-startup) set, transient errors are retried until the budget is spent before `Load` fails.
 - **No secret fields** — the resolver returns immediately; Vault is never dialed.
 - **Background refresh failure** — the previous value is kept, the error goes to `WithSecretErrorHandler` (if set), and the refresher retries after the backoff.
 - **`Resolved()` returns `false`** after a successful `Load` only if the field's path was never set in the configuration.

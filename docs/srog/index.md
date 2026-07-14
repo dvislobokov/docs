@@ -21,9 +21,9 @@ log.Information("trip {TripId} assigned to driver {DriverId} eta {EtaSeconds}s",
 - **Four output formats** — human console, NDJSON, Elastic Common Schema (ECS), and OpenTelemetry OTLP/JSON log records.
 - **Log rotation** — by size and/or time (hourly/daily), with backup and age retention plus gzip compression.
 - **Request-scoped logging** — propagate an enriched logger through `context.Context`; pluggable context extractors add correlation fields such as OpenTelemetry `trace_id`/`span_id`.
-- **Declarative configuration** — build the same logger from a JSON (or YAML) config file.
+- **Declarative configuration** — build the same logger from a JSON (or YAML) config file, with pluggable sink types registered by integration modules.
 - **Async sinks** — offload slow destinations to a background goroutine with a bounded, non-blocking queue.
-- **Integrations** — `net/http` middleware, gRPC interceptors, Echo middleware, a direct Elasticsearch sink, and an OpenTelemetry trace-correlation bridge.
+- **Integrations** — `net/http` middleware, gRPC interceptors, Echo middleware, a direct Elasticsearch sink, and OpenTelemetry both ways: trace-correlation fields and direct log export to the Collector over OTLP.
 - **Fast** — zerolog's zero-allocation event model underneath; the structured-only hot path allocates nothing (see [Performance](./performance.md)).
 
 ## Installation

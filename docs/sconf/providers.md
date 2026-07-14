@@ -39,7 +39,7 @@ cfg, err := sconf.Load[Config](builder, os.Args[1:]) // 5: command line (highest
 ```
 
 ::: info
-`sconf.Load` appends the command-line layer itself (when `args` is non-empty), so the CLI always has the highest priority. Struct-tag `default` values are not a layer at all — they apply during binding, only when no source provided the key.
+`sconf.Load` appends the command-line layer itself (when `args` is non-empty), so the CLI always has the highest priority. Just below it, `Load` inserts a layer for fields bound to a named variable via the [`env:"NAME"` tag](./environment-variables.md#binding-one-field-to-a-named-variable). Struct-tag `default` values are not a layer at all — they apply during binding, only when no source provided the key.
 :::
 
 With this base file and overlay:
@@ -131,6 +131,37 @@ sconf.New().AddEnvironmentVariables("MYAPP_")
 ```
 
 The prefix (which may be empty) is stripped from the variable name; variables without the prefix are ignored; `__` becomes `:`. See [Environment variables](./environment-variables.md) for the full treatment, including arrays of objects.
+
+## .env files
+
+```go
+sconf.New().
+	AddYAMLFile("appsettings.yaml").
+	AddDotEnvFile(".env", "APP_", sconf.Optional()). // skipped when absent (CI, prod)
+	AddEnvironmentVariables("APP_")                  // real env still wins
+```
+
+`AddDotEnvFile(path, prefix, opts...)` reads `KEY=VALUE` lines and treats them exactly like environment variables: the prefix (which may be empty) is stripped, keys without it are skipped, and `__` becomes `:`. The real process environment is **not** touched — the file is just another configuration layer, so precedence follows its position in the builder as usual. Typical use: a developer-local `.env` layered between the base file and the real environment.
+
+It is built on the same file provider as JSON/YAML/TOML, so `Optional()`, `Wait(timeout)`, and `PollInterval(d)` all apply, with the same wrapped read/parse errors.
+
+Supported syntax:
+
+```sh
+# full-line comments and blank lines
+APP_DATABASE__HOST=localhost
+export APP_DATABASE__PORT=5432        # optional export prefix; trailing comments after a space
+APP_GREETING="hello\nworld"           # double quotes expand \n \t \r \" \\
+APP_TOKEN='as $is'                    # single quotes are fully literal
+```
+
+Not supported: multiline values and variable interpolation. Malformed lines produce positional errors such as `dotenv: line 3: missing '='` or `dotenv: line 7: unterminated quoted value`.
+
+The constructor is also available directly as `provider.DotEnvFile`.
+
+::: warning
+A `.env` containing `VAULT_ADDR`, `VAULT_TOKEN`, etc. does **not** configure sconf's Vault client — [Vault settings](./vault.md) are read from real process environment variables only.
+:::
 
 ## Command line
 

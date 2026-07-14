@@ -95,6 +95,26 @@ Note what happened per key:
 Slice indices do not need to be contiguous. The binder collects the numeric child segments, sorts them ascending, and collapses holes — indices `0`, `3`, `7` produce a 3-element slice in that order.
 :::
 
+## Binding one field to a named variable {#binding-one-field-to-a-named-variable}
+
+Sometimes a field must follow an established variable name that doesn't fit the prefix convention — `DB_HOST`, `PORT`, a name dictated by the platform. The `env:"NAME"` struct tag binds the field to that *exact* variable, with no prefix and no `__` mapping:
+
+```go
+type Settings struct {
+	DB struct {
+		Host string `env:"DB_HOST"`
+	}
+}
+// DB_HOST=prod-db  ->  cfg.DB.Host == "prod-db"
+```
+
+Rules:
+
+- Only `Load`/`LoadContext` read the tag (a bare `Builder.Build()` + `bind.Bind` does not). The looked-up values form a layer **above all builder providers** (files, env, Vault) and **below the command line**.
+- The variable is read with `os.LookupEnv`, so a set-but-empty variable binds the empty string.
+- Fields inside slice or map elements are ignored — one variable cannot address a particular element.
+- The name shows up everywhere help is generated: `Usage` appends `(env DB_HOST)`, and [`--help --format env`](./usage-help.md#help-format) and [`Dump`'s env format](./advanced.md#dumping-the-merged-configuration) print the exact name instead of a prefixed one.
+
 ## Interaction with other layers
 
 The environment layer participates in normal precedence: it overrides whatever was added before it (typically files) and is overridden by whatever comes after (typically the command line). A common production setup:

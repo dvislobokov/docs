@@ -55,7 +55,7 @@ file       config: read "nope.json": open nope.json: The system cannot find the 
 
 ## `ErrHelp` in detail
 
-`Load` checks `args` for `-h`, `--h`, `-help`, `--help`, `-?`, `/?`, `/help`, `/h` *before* building anything. On a match it prints `Usage[T]()` to stdout and returns `ErrHelp` — the caller's only job is to exit. Pass `nil` args to opt out entirely.
+`Load` checks `args` for `-h`, `--h`, `-help`, `--help`, `-?`, `/?`, `/help`, `/h` *before* building anything. On a match it prints the usage in the requested format (`UsageFormat[T]` honoring a [`--format` flag](./usage-help.md#help-format), plain `Usage[T]()` table by default) to stdout and returns `ErrHelp` — the caller's only job is to exit. An unknown `--format` value is the exception: `Load` prints nothing and returns `config: unknown help format "..." (want table|env|json|yaml|toml)`, which is **not** `ErrHelp`. Pass `nil` args to opt out entirely.
 
 ## `sconf.ErrVaultNotConfigured` in detail
 
@@ -65,7 +65,7 @@ Returned only when the configuration actually contains secret fields. The messag
 vault: not configured: set VAULT_ADDR (or VAULT_URL) — config has secret fields but Vault is not configured
 ```
 
-Other variants: `VAULT_AUTH=token requires VAULT_TOKEN`, `VAULT_AUTH=kubernetes requires VAULT_K8S_ROLE`, `VAULT_AUTH=approle requires VAULT_ROLE_ID and VAULT_SECRET_ID`, and `unknown VAULT_AUTH "..."`. Handle it when you want a friendlier startup diagnostic:
+Other variants: `VAULT_AUTH=token requires VAULT_TOKEN`, `VAULT_AUTH=kubernetes requires VAULT_K8S_ROLE`, `VAULT_AUTH=approle requires VAULT_ROLE_ID and VAULT_SECRET_ID`, and `unknown VAULT_AUTH "..."`. Related startup errors from the [Vault wait](./vault.md#waiting-for-vault-at-startup) feature: `vault: invalid VAULT_WAIT "..."` for a malformed duration and `vault: still unavailable after waiting <timeout>: <last error>` when the wait budget runs out. Handle it when you want a friendlier startup diagnostic:
 
 ```go
 if errors.Is(err, sconf.ErrVaultNotConfigured) {
