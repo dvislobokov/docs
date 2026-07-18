@@ -1,6 +1,6 @@
 # shost
 
-shost is a hosting framework for Go, inspired by `Microsoft.Extensions.Hosting`. It removes the `main()` boilerplate of long-running services — signal handling, ordered startup, graceful shutdown with a deadline, panic recovery, and restart supervision — while keeping dependency wiring explicit and idiomatic. There is no DI container.
+shost is a hosting framework for Go, inspired by `Microsoft.Extensions.Hosting`. Stable since v1.0.0 — the public API follows semantic versioning. It removes the `main()` boilerplate of long-running services — signal handling, ordered startup, graceful shutdown with a deadline, panic recovery, and restart supervision — while keeping dependency wiring explicit and idiomatic. There is no DI container.
 
 ## Why shost
 
@@ -11,7 +11,7 @@ shost is a hosting framework for Go, inspired by `Microsoft.Extensions.Hosting`.
 - **Startup tasks.** `AddStartupTask` runs one-shot work (migrations, cache warmup) sequentially before any service starts; a failure aborts the host.
 - **Lifecycle hooks.** `OnStarted` / `OnStopping` / `OnStopped` / `OnReload` — the analog of `IHostApplicationLifetime`, plus SIGHUP-triggered reload on Unix.
 - **Panic-safe.** Panics in `Start`, `Stop`, hooks, and observers are recovered, logged with a stack trace, and treated as errors.
-- **Standard library only.** The core module and the `httpsvc`, `cron`, `health`, `shosttest`, `sdnotify`, and `single` subpackages have no external dependencies. Logging is optional and interface-based — srog satisfies it directly, and `SlogLogger` adapts `log/slog`.
+- **Standard library only.** The core module and the `httpsvc`, `cron`, `health`, `swaggerui`, `shosttest`, `sdnotify`, and `single` subpackages have no external dependencies. Logging is optional and interface-based — srog satisfies it directly, and `SlogLogger` adapts `log/slog`.
 - **gRPC out of the box.** Separate `grpcsvc` and `grpcgw` modules run a gRPC server and a grpc-gateway REST frontend as supervised services.
 - **Daemon-ready.** systemd `Type=notify` integration with watchdog (`sdnotify`), a Windows service bridge with SCM handshake and Event Log (`winsvc`), and a machine-wide single-instance lock (`single`).
 - **Testable.** `shosttest` runs a real host inside a test and records lifecycle events for assertions.

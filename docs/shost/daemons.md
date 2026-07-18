@@ -1,6 +1,6 @@
 # Running as a daemon
 
-shost v0.6 adds the pieces needed to run a host under a service manager: systemd integration (`sdnotify`), a Windows service bridge (`winsvc`), a single-instance lock (`single`), and the [reload hook](./services.md#reload) they plug into. `sdnotify` and `single` are part of the core module (standard library only); `winsvc` is a separate module.
+shost ships the pieces needed to run a host under a service manager: systemd integration (`sdnotify`), a Windows service bridge (`winsvc`), a single-instance lock (`single`), and the [reload hook](./services.md#reload) they plug into. `sdnotify` and `single` are part of the core module (standard library only); `winsvc` is a separate module.
 
 ## systemd (sdnotify)
 
