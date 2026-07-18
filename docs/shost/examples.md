@@ -254,7 +254,60 @@ host := shost.New().
 
 The registry starts **not ready**, so no traffic arrives before `OnStarted`. Both handlers return JSON, e.g. `{ "status": "unhealthy", "checks": { "db": "connection refused", "cache": "ok" } }`. See [Health checks](./health.md).
 
-## 10. Periodic jobs: fixed intervals
+### Custom probe paths
+
+`Mount` defaults to `/healthz` and `/readyz`; override either one:
+
+```go
+reg.Mount(mux,
+	health.WithLivePath("/live"),
+	health.WithReadyPath("/ready"),
+)
+```
+
+Point `livenessProbe`/`readinessProbe` in the pod spec at the same paths.
+
+## 10. Bundled Swagger UI next to the API
+
+`shost/swaggerui` embeds swagger-ui-dist into the binary (`go:embed`) and exposes it as a plain `http.Handler` — no middleware, no CDN, works offline. See [HTTP Services](./http.md#swagger-ui).
+
+```go
+import "github.com/dvislobokov/shost/swaggerui"
+
+//go:embed openapi.json
+var spec []byte
+
+mux := http.NewServeMux()
+mux.Handle("/api/orders", ordersHandler)
+
+swaggerui.Mount(mux, "/swagger/",
+	swaggerui.WithSpec("openapi.json", spec), // handler serves the spec too
+	swaggerui.WithTitle("Orders API"),
+)
+
+host := shost.New().AddService(httpsvc.New(":8080", mux)).MustBuild()
+// GET /swagger/             → the UI, loading /swagger/openapi.json
+// GET /swagger/openapi.json → the embedded document (application/json)
+```
+
+The handler resolves everything relative to its mount point, so any prefix works — including wiring it by hand:
+
+```go
+h := swaggerui.Handler(swaggerui.WithSpecURL("/api/openapi.json")) // spec served by your API
+mux.Handle("/docs/", http.StripPrefix("/docs", h))
+```
+
+Several `WithSpec` / `WithSpecURL` options turn the spec field into a drop-down — one UI for many services:
+
+```go
+swaggerui.Mount(mux, "/swagger/",
+	swaggerui.WithSpec("orders.json", ordersSpec),
+	swaggerui.WithSpec("billing.yaml", billingSpec), // .yaml served as application/yaml
+	swaggerui.WithSpecURL("https://petstore3.swagger.io/api/v3/openapi.json"),
+)
+```
+
+## 11. Periodic jobs: fixed intervals
 
 `cron.Every` runs a job on a fixed interval as a supervised service. Runs never overlap; a busy tick is dropped.
 
@@ -272,7 +325,7 @@ host := shost.New().
 
 By default a failed run (or a panic — recovered) is passed to `WithErrorHandler` and the schedule continues; add `cron.StopOnError()` to make a failure stop the service instead. See [Cron jobs](./cron.md).
 
-## 11. Cron expressions, jitter, and per-run timeouts
+## 12. Cron expressions, jitter, and per-run timeouts
 
 `cron.At` takes a `Schedule`; `MustExpr` builds one from a classic 5-field expression (aliases like `@daily` work too):
 
@@ -302,7 +355,7 @@ cron.At("odd-hours", cron.ScheduleFunc(func(after time.Time) time.Time {
 
 With `At`, the next run time is computed **after** the previous run completes — scheduled times that passed mid-run are skipped, never queued.
 
-## 12. A gRPC server
+## 13. A gRPC server
 
 `grpcsvc` (separate module) runs a `*grpc.Server` with the full lifecycle — readiness once the listener accepts, `GracefulStop` under the shared deadline, forceful stop when it expires:
 
@@ -323,7 +376,7 @@ host := shost.New().
 
 If in-flight RPCs don't drain within the deadline, `Stop` stops the server forcefully and returns a "graceful shutdown timed out" error wrapping `ctx.Err()`. See [gRPC and grpc-gateway](./grpc.md).
 
-## 13. A REST frontend with grpc-gateway
+## 14. A REST frontend with grpc-gateway
 
 `grpcgw` owns the gateway boilerplate: the `runtime.ServeMux`, the client connection, handler registration, and the HTTP server lifecycle. Register the gateway **after** the gRPC server — readiness ordering gives you a fully wired pipeline:
 
@@ -347,7 +400,7 @@ host := shost.New().
 The connection to the endpoint is **plaintext by default** — fine for the usual same-host gateway. `WithDialOptions` *replaces* the defaults, so supply your own transport credentials when the gRPC server is remote or TLS-terminated.
 :::
 
-## 14. Environments and config layering with sconf
+## 15. Environments and config layering with sconf
 
 `Environment` is the analog of ASP.NET Core's `IHostEnvironment`. Read it from `APP_ENVIRONMENT` (unset resolves to `Production`) and use it to select config layers with [sconf](/sconf/):
 
@@ -377,7 +430,7 @@ host.Environment().IsProduction() // matching is case-insensitive; custom values
 
 `appsettings.Development.yaml` overrides the base only in development — the `appsettings.{Environment}.json` pattern. See [Environments](./environments.md).
 
-## 15. Logging: srog and log/slog
+## 16. Logging: srog and log/slog
 
 The `Logger` interface is optional and signature-compatible with [srog](/srog/), so `*srog.Logger` passes straight in:
 
@@ -398,7 +451,7 @@ host := shost.New().
 
 `SlogLogger` renders srog-style `{Name}` templates into the message *and* adds each matched placeholder as a slog attribute (`Error` also appends an `error` attribute). Without any logger the host is silent — but errors are still returned from `Run`.
 
-## 16. Hot reload without a restart
+## 17. Hot reload without a restart
 
 `OnReload` hooks run on `Host.Reload()`; on Unix, `Run()` also wires SIGHUP to it — the classic daemon convention:
 
@@ -415,7 +468,7 @@ host.Run() // kill -HUP <pid> → Reload (Unix only; RunContext installs no sign
 
 `Reload` is safe from any goroutine; concurrent calls are serialized. Under a Windows service, the [winsvc module](./daemons.md#windows-service-winsvc) maps the SCM `PARAMCHANGE` control to the same hooks (`sc control my-agent paramchange`). See [Services and lifecycle](./services.md#reload).
 
-## 17. Metrics: the Observer and OpenTelemetry
+## 18. Metrics: the Observer and OpenTelemetry
 
 Lifecycle events flow through an `Observer` — a struct of optional callbacks; register several and they run in order:
 
@@ -451,7 +504,7 @@ host := shost.New().
 
 Out of the box: `shost.host.up` (gauge), `shost.service.restarts` and `shost.service.failures` (counters, per service), `shost.service.stop.duration` (histogram), and a `shost.service.stop` span — enough to alert on flapping services and slow shutdowns. See [Observability](./observability.md).
 
-## 18. Running under systemd
+## 19. Running under systemd
 
 `sdnotify.Bind` wires the sd_notify protocol into the lifecycle: `READY=1` on `OnStarted`, `STOPPING=1` on `OnStopping`, and a watchdog pinger when the unit sets `WatchdogSec=`. Everything is a **no-op when `NOTIFY_SOCKET` is unset**, so the same binary runs in a terminal or a container unchanged:
 
@@ -479,7 +532,7 @@ fmt.Print(sdnotify.Unit(sdnotify.UnitConfig{
 
 The generated unit includes `Restart=on-failure` — systemd restarts the *process*, while [`WithRestart`](./restart-policies.md) supervises individual services *inside* it. See [Running as a daemon](./daemons.md).
 
-## 19. A Windows service with a single-instance lock
+## 20. A Windows service with a single-instance lock
 
 Under the Service Control Manager there are no signals — `winsvc.Run` (separate module) speaks the SCM protocol and falls back to plain `Host.Run` everywhere else, so one binary works as a service, in a container, and from a terminal:
 
@@ -523,7 +576,7 @@ if os.Args[1] == "install" {
 
 See [Running as a daemon](./daemons.md#windows-service-winsvc).
 
-## 20. Testing a hosted service with shosttest
+## 21. Testing a hosted service with shosttest
 
 `shosttest` (core module, standard library only) runs a *real* host inside a test — `Start` blocks until every service is ready, and a `t.Cleanup` stops the host automatically:
 

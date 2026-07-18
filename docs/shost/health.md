@@ -35,8 +35,25 @@ func (r *Registry) SetReady(v bool)
 func (r *Registry) Ready() bool
 func (r *Registry) LiveHandler() http.Handler  // 200 if all checks pass, else 503
 func (r *Registry) ReadyHandler() http.Handler // 200 only if ready AND all checks pass
-func (r *Registry) Mount(mux *http.ServeMux)   // /healthz -> Live, /readyz -> Ready
+func (r *Registry) Mount(mux *http.ServeMux, opts ...MountOption)
+                                               // /healthz -> Live, /readyz -> Ready
+
+func WithLivePath(path string) MountOption     // override /healthz
+func WithReadyPath(path string) MountOption    // override /readyz
 ```
+
+## Overriding the probe paths
+
+`Mount` uses `/healthz` and `/readyz` by default; pass options to change either:
+
+```go
+reg.Mount(mux,
+	health.WithLivePath("/live"),
+	health.WithReadyPath("/ready"),
+)
+```
+
+Only the overridden path changes — `reg.Mount(mux, health.WithReadyPath("/ready"))` keeps liveness at `/healthz`. Point your Kubernetes probe config at the same paths.
 
 ## Liveness vs readiness
 

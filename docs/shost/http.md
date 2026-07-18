@@ -48,13 +48,48 @@ httpsvc.New(":8080", mux, httpsvc.WithServer(func(s *http.Server) {
 }))
 ```
 
+## Swagger UI
+
+`shost/swaggerui` ships a fully bundled Swagger UI as a plain `http.Handler` — the swagger-ui-dist assets are embedded with `go:embed`, so it works offline, needs no CDN and no middleware. Mount it next to your API:
+
+```go
+import "github.com/dvislobokov/shost/swaggerui"
+
+//go:embed openapi.json
+var spec []byte
+
+swaggerui.Mount(mux, "/swagger/",
+	swaggerui.WithSpec("openapi.json", spec), // served by the handler itself
+	swaggerui.WithTitle("Billing API"),
+)
+// GET /swagger/  → the UI, loading /swagger/openapi.json
+```
+
+The handler is relative to its mount point, so it also composes manually with any prefix:
+
+```go
+h := swaggerui.Handler(swaggerui.WithSpecURL("/api/openapi.json")) // spec served elsewhere
+mux.Handle("/docs/", http.StripPrefix("/docs", h))
+```
+
+```go
+func Handler(opts ...Option) http.Handler
+func Mount(mux *http.ServeMux, prefix string, opts ...Option)
+
+func WithSpec(name string, spec []byte) Option // serve + load ./name (.json/.yaml); repeatable
+func WithSpecURL(url string) Option            // load an externally served document; repeatable
+func WithTitle(title string) Option            // page title, default "Swagger UI"
+```
+
+Several `WithSpec`/`WithSpecURL` calls turn the UI's spec field into a drop-down selector.
+
 ## With health checks
 
 Mount [health](./health.md) handlers on the same mux and flip readiness from the lifecycle:
 
 ```go
 reg := health.NewRegistry(health.CheckerFunc("db", db.Ping))
-reg.Mount(mux)
+reg.Mount(mux) // paths overridable: health.WithLivePath / health.WithReadyPath
 
 host := shost.New().
 	AddService(httpsvc.New(":8080", mux)).

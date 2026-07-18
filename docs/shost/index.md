@@ -96,7 +96,8 @@ func main() {
 | `shost` | `Builder`, `Host`, `Service`/`Readier`/`Logger` interfaces, startup tasks, `RestartPolicy`, `Environment`, `Observer`, `SlogLogger` |
 | `shost/httpsvc` | a `net/http` server as a `Service`, with readiness and drained shutdown |
 | `shost/cron` | periodic jobs as services — fixed intervals and cron expressions (non-overlapping) |
-| `shost/health` | a `Checker` registry with `/healthz` and `/readyz` handlers |
+| `shost/health` | a `Checker` registry with `/healthz` and `/readyz` handlers (paths overridable) |
+| `shost/swaggerui` | bundled Swagger UI as a plain `http.Handler` — embedded assets, works offline |
 | `shost/shosttest` | run a real host in tests; record lifecycle events for assertions |
 | `shost/sdnotify` | systemd `Type=notify` integration: readiness, stopping, watchdog, unit generation |
 | `shost/single` | machine-wide single-instance lock, released by the OS on crash |

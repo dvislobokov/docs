@@ -196,7 +196,23 @@ func (r *Registry) SetReady(v bool)
 func (r *Registry) Ready() bool
 func (r *Registry) LiveHandler() http.Handler   // /healthz — 200 / 503
 func (r *Registry) ReadyHandler() http.Handler  // /readyz — 200 only if ready + healthy
-func (r *Registry) Mount(mux *http.ServeMux)
+func (r *Registry) Mount(mux *http.ServeMux, opts ...MountOption)
+
+func WithLivePath(path string) MountOption   // default "/healthz"
+func WithReadyPath(path string) MountOption  // default "/readyz"
+```
+
+## `shost/swaggerui`
+
+Part of the core module; standard library only. Bundled Swagger UI (swagger-ui-dist embedded via `go:embed`, works offline). See [HTTP Services](./http.md#swagger-ui).
+
+```go
+func Handler(opts ...Option) http.Handler                     // mount-point relative
+func Mount(mux *http.ServeMux, prefix string, opts ...Option) // Handle(prefix, StripPrefix(...))
+
+func WithSpec(name string, spec []byte) Option // serve + load ./name; repeatable
+func WithSpecURL(url string) Option            // load an external document; repeatable
+func WithTitle(title string) Option            // default "Swagger UI"
 ```
 
 ## `shost/shosttest`
