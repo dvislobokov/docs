@@ -70,6 +70,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/sorm/' },
             { text: 'Quick Start', link: '/sorm/quick-start' },
+            { text: 'Examples', link: '/sorm/examples' },
           ],
         },
         {
@@ -126,6 +127,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/shost/' },
             { text: 'Quick Start', link: '/shost/quick-start' },
+            { text: 'Examples', link: '/shost/examples' },
           ],
         },
         {
@@ -155,6 +157,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/smsg/' },
             { text: 'Quick Start', link: '/smsg/quick-start' },
+            { text: 'Examples', link: '/smsg/examples' },
           ],
         },
         {
