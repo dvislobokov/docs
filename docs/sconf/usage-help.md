@@ -4,17 +4,27 @@ sconf generates command-line help directly from your configuration struct — th
 
 ## Built-in `--help` handling
 
-`sconf.Load[T]` checks the argument list before doing anything else. If a help flag is present, it prints the generated usage to stdout and returns `sconf.ErrHelp`:
+`sconf.Load[T]` checks the argument list before doing anything else. If a help flag is present, it prints the generated usage to stdout and **exits the process with code 0** (since v1.7.0) — no handling code is needed:
 
 ```go
 cfg, err := sconf.Load[Config](sconf.New(), os.Args[1:])
-switch {
-case errors.Is(err, sconf.ErrHelp):
-	os.Exit(0) // usage already printed to stdout by Load
-case err != nil:
+// on --help the process has already exited here
+if err != nil {
 	log.Fatal(err)
 }
 ```
+
+`sconf.ErrHelp` still exists for compatibility — existing `errors.Is(err, sconf.ErrHelp)` branches compile and simply never fire.
+
+The table output ends with a section listing the built-in flags of `Load` itself — flags that are not configuration keys:
+
+```txt
+Built-in flags:
+  --help, -h, -?                     print this help and exit
+  --format table|env|json|yaml|toml  help output format (use with --help)
+```
+
+(The machine-readable formats and the HTTP usage handler serve the pure key schema, without this section.)
 
 Recognized help flags (checked by `sconf.HelpRequested`):
 
@@ -96,6 +106,10 @@ Options:
   --Retry:Max      int  (default "3")  max delivery attempts
   --Retry:Backoff  duration  (default "2s")  pause between attempts
   --Channels       []string  channels to enable
+
+Built-in flags:
+  --help, -h, -?                     print this help and exit
+  --format table|env|json|yaml|toml  help output format (use with --help)
 ```
 
 Points to note, all visible above:

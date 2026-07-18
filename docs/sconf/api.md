@@ -13,7 +13,7 @@ func Load[T any](b *Builder, args []string, opts ...LoadOption) (*T, error)
 func LoadContext[T any](ctx context.Context, b *Builder, args []string, opts ...LoadOption) (*T, error)
 ```
 
-The main entry point. In order: prints usage and returns `ErrHelp` if `args` contains a help flag (honoring `--help --format ...`; an unknown format returns a non-`ErrHelp` error instead); layers the values of environment variables named by `env:"NAME"` tags above the builder's providers; appends `args` as the highest-priority command-line layer (when non-empty); builds the merged configuration; binds it into a new `*T`; resolves secret fields from Vault; starts background refresh for every refreshable secret. `args` is usually `os.Args[1:]`; pass `nil` to skip both the CLI layer and the help check.
+The main entry point. In order: prints usage (including the built-in flags section) and **exits the process with code 0** if `args` contains a help flag (honoring `--help --format ...`; an unknown format returns an error instead of exiting); layers the values of environment variables named by `env:"NAME"` tags above the builder's providers; appends `args` as the highest-priority command-line layer (when non-empty); builds the merged configuration; binds it into a new `*T`; resolves secret fields from Vault; starts background refresh for every refreshable secret. `args` is usually `os.Args[1:]`; pass `nil` to skip both the CLI layer and the help check.
 
 The context passed to `LoadContext` bounds both the initial Vault requests and the **lifetime of the background refresh**: cancelling it stops the refresh goroutines. `Load` uses `context.Background()`, so secrets are refreshed for the lifetime of the process — nothing to stop or manage.
 
@@ -137,7 +137,7 @@ Refresh errors are silently swallowed by default (the previous value is kept); `
 ### Errors and aliases
 
 ```go
-var ErrHelp = errors.New("config: help requested")
+var ErrHelp = errors.New("config: help requested") // compat only: since v1.7.0 Load exits on --help itself
 var ErrBindType = bind.ErrBindType
 var ErrEnum = bind.ErrEnum
 

@@ -183,6 +183,36 @@ For the [`AddVaultKV`/`AddVaultKVAt` layers](#the-vault-kv-configuration-layer) 
 
 In Kubernetes with istio, `VAULT_WAIT=30s` complements `holdApplicationUntilProxyStarts: true` — the app starts once the sidecar is ready, and the wait rides out the remaining seconds before egress works.
 
+## Secrets without Vault: inline values
+
+Since v1.7.0 a secret field can be filled straight from the configuration, with no Vault environment at all — handy for local development and stands. Two forms:
+
+**Nested section** (the natural one): write the same fields Vault would return as an ordinary nested config section. For `secret.Value` use a single `value` key:
+
+```yaml
+db:                      # secret.UserPass
+  username: devuser
+  password: devpass
+stripe_key:              # secret.Value
+  value: sk_test_local
+extra:                   # secret.KV
+  region: local
+tls:                     # secret.Cert (ca_chain works as a list)
+  certificate: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+  private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+```
+
+When one layer sets a Vault *path* and another sets a nested *section* for the same key, **the section wins** — a local `appsettings.local.yaml` can override production paths with real values. Individual fields can even come from different layers (say, only the password from an environment variable).
+
+**`plain:` prefix** (the one-liner escape hatch, for a single environment variable or CLI argument): for `UserPass`/`KV`/`Cert` the payload is a JSON, YAML or TOML mapping; for `Value` it is the literal string:
+
+```sh
+APP_DB='plain:{"username": "devuser", "password": "devpass"}'
+APP_STRIPE_KEY=plain:sk_test_local
+```
+
+Inline secrets are applied at bind time: they never contact Vault, are not refreshed in the background, and `Resolved()` reports `true`. If **all** secrets are inline, Vault is not dialed at all. Keep in mind the values then live in the configuration in clear text (and show up in `Dump` — redact with `WithDumpRedact`).
+
 ## Local development: `VAULT_SECRETS_FILE` / `vault.secrets`
 
 Set `VAULT_SECRETS_FILE` to a YAML (or JSON) file and secrets are served from it instead of Vault — no server, no `VAULT_ADDR`, no authentication. Since v1.5.0 the variable is optional: when it is not set but a file named `vault.secrets` exists in the working directory, that file is picked up automatically (the explicit variable always wins). The file maps **the same full paths your config uses** to the fields Vault would return:

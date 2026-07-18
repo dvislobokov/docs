@@ -54,10 +54,8 @@ func main() {
 			AddEnvironmentVariables("PIXELMILL_"),
 		os.Args[1:],
 	)
-	switch {
-	case errors.Is(err, sconf.ErrHelp):
-		os.Exit(0) // usage has already been printed
-	case err != nil:
+	// on --help, Load prints usage and exits the process itself
+	if err != nil {
 		log.Fatal(err)
 	}
 

@@ -9,7 +9,7 @@ func Load[T any](b *Builder, args []string) (*T, error)
 func LoadContext[T any](ctx context.Context, b *Builder, args []string) (*T, error)
 ```
 
-`Load` calls `LoadContext` with `context.Background()`. The context bounds the initial Vault requests and the lifetime of the background secret refresh (cancelling it stops the refresh goroutines); the binder itself is synchronous. If `args` contains a help flag, usage is printed to stdout and `ErrHelp` is returned. `Load` then layers two things on top of the builder's providers: values of environment variables named by [`env:"NAME"` tags](./environment-variables.md#binding-one-field-to-a-named-variable), and — when `args` is non-empty — the command-line layer, which has the highest priority.
+`Load` calls `LoadContext` with `context.Background()`. The context bounds the initial Vault requests and the lifetime of the background secret refresh (cancelling it stops the refresh goroutines); the binder itself is synchronous. If `args` contains a help flag, usage is printed to stdout and the process exits with code 0 (since v1.7.0). `Load` then layers two things on top of the builder's providers: values of environment variables named by [`env:"NAME"` tags](./environment-variables.md#binding-one-field-to-a-named-variable), and — when `args` is non-empty — the command-line layer, which has the highest priority.
 
 The lower-level `bind.Bind(m, prefix, target)` exists for advanced use, but it takes the internal flat map, so in practice you always go through `Load`.
 

@@ -6,7 +6,7 @@ sconf reports failures through wrapped sentinel errors, so callers branch with `
 
 | Sentinel | Package | Returned when |
 |---|---|---|
-| `sconf.ErrHelp` | `sconf` | A help flag was found in `args`; usage has already been printed to stdout. Mirrors `flag.ErrHelp`. |
+| `sconf.ErrHelp` | `sconf` | Kept for compatibility: since v1.7.0 `Load` prints usage and exits the process itself on a help flag, so this error is no longer observed in normal code. |
 | `sconf.ErrBindType` (= `bind.ErrBindType`) | `sconf`, `sconf/bind` | A value cannot be converted to the target field type (wrapped via `%w`). |
 | `sconf.ErrEnum` (= `bind.ErrEnum`) | `sconf`, `sconf/bind` | A value is not in the field's `enum` list (wrapped via `%w`). |
 | `sconf.ErrVaultNotConfigured` | `sconf` | The struct has secret fields but the Vault environment is incomplete (missing `VAULT_ADDR`, missing auth credentials, or an unknown `VAULT_AUTH`). |
@@ -20,9 +20,8 @@ type Config struct {
 }
 
 cfg, err := sconf.Load[Config](builder, os.Args[1:])
+// (--help never reaches here: Load prints usage and exits the process itself)
 switch {
-case errors.Is(err, sconf.ErrHelp):
-	os.Exit(0) // help was requested and already printed
 case errors.Is(err, sconf.ErrEnum):
 	log.Fatalf("invalid option value: %v", err)
 case errors.Is(err, sconf.ErrBindType):
@@ -53,9 +52,9 @@ file       config: read "nope.json": open nope.json: The system cannot find the 
 - **File errors** wrap the OS error: `config: read "<path>": ...` for I/O and `config: parse "<path>": ...` for malformed content. A file added with `sconf.Wait(timeout)` that never appears produces `config: file "<path>" did not appear within <timeout>`.
 - **Validator failures** are wrapped with the section path: `config: validate "encoder": av1 requires at least 4 threads, got 2` (captured output — see [Advanced](./advanced.md#self-validation-with-validator)).
 
-## `ErrHelp` in detail
+## Help handling in detail
 
-`Load` checks `args` for `-h`, `--h`, `-help`, `--help`, `-?`, `/?`, `/help`, `/h` *before* building anything. On a match it prints the usage in the requested format (`UsageFormat[T]` honoring a [`--format` flag](./usage-help.md#help-format), plain `Usage[T]()` table by default) to stdout and returns `ErrHelp` — the caller's only job is to exit. An unknown `--format` value is the exception: `Load` prints nothing and returns `config: unknown help format "..." (want table|env|json|yaml|toml)`, which is **not** `ErrHelp`. Pass `nil` args to opt out entirely.
+`Load` checks `args` for `-h`, `--h`, `-help`, `--help`, `-?`, `/?`, `/help`, `/h` *before* building anything. On a match it prints the usage in the requested format (honoring a [`--format` flag](./usage-help.md#help-format); the default table view ends with the built-in flags section) to stdout and **exits the process with code 0** — since v1.7.0 the caller has nothing to do. `sconf.ErrHelp` remains exported for compatibility with older `errors.Is` branches. An unknown `--format` value is the exception: `Load` prints nothing, does not exit, and returns `config: unknown help format "..." (want table|env|json|yaml|toml)`. Pass `nil` args to opt out entirely.
 
 ## `sconf.ErrVaultNotConfigured` in detail
 

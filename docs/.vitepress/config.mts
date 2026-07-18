@@ -43,6 +43,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/sconf/' },
             { text: 'Quick Start', link: '/sconf/quick-start' },
+            { text: 'Examples', link: '/sconf/examples' },
           ],
         },
         {
