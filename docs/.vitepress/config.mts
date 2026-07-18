@@ -99,6 +99,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/srog/' },
             { text: 'Quick Start', link: '/srog/quick-start' },
+            { text: 'Examples', link: '/srog/examples' },
           ],
         },
         {
