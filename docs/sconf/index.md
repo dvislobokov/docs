@@ -84,7 +84,7 @@ The value of `workers` came from the environment, `limits:process_timeout` from 
 | `sconf` | `Builder`, `Config`, `Load[T]`, `Usage[T]`, `Dump[T]`, sentinel errors, option re-exports |
 | `sconf/provider` | `JSONFile`, `YAMLFile`, `TOMLFile`, `DotEnvFile`, `Env`, `Args`, `Map`, file options |
 | `sconf/bind` | reflection binder, `Unmarshaler` / `Validator` hooks, `Describe` / `Usage` |
-| `sconf/secret` | secret field types (`UserPass`, `Cert`, `KV`, `Value`) — standard library only |
+| `sconf/secret` | secret field types (`UserPass`, `Cert`, `KV`, `Value`) — depends only on the YAML/TOML parsers |
 | `sconf/internal/vault` | Vault client internals — used by the core, not imported directly |
 
 ## Where to go next

@@ -303,11 +303,14 @@ func (u *UserPass) Resolved() bool
 func (u *UserPass) Path() string
 ```
 
-Username/password read from a full path. Username comes from `username` (override: `?username_field=`); password from `current_password` when present (Active Directory), else `password` (override: `?password_field=`).
+Username/password read from a full path. Username comes from `username` (override: `?username_field=`); password from `current_password` when present (Active Directory), else `password` (override: `?password_field=`). The KV v2 envelope (`data`/`metadata`) is unwrapped automatically.
+
+With `?field=` (since v1.6.0), credentials are taken from a single text field of a KV secret: the field's text is parsed as JSON, then YAML, then TOML, and username/password are read from the parsed mapping (`username_field`/`password_field` apply to it). A missing field or unparsable text is an error.
 
 ```go
 type Config struct {
-	DB secret.UserPass `yaml:"db"` // yaml: db: database/creds/billing
+	DB    secret.UserPass `yaml:"db"`    // yaml: db: database/creds/billing
+	Redis secret.UserPass `yaml:"redis"` // yaml: redis: kv/data/secrets?field=redis
 }
 ```
 

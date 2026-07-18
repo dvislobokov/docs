@@ -1,6 +1,6 @@
 # Vault Secrets
 
-sconf resolves configuration values from HashiCorp Vault out of the box (since v1.1.0 the integration is built into the core — no extra imports, no registration). Your config file holds only the *path* to a secret; the value is fetched at load time and refreshed in the background automatically. `sconf/secret` defines the field types (standard library only); the Vault client itself lives in the internal `sconf/internal/vault` package.
+sconf resolves configuration values from HashiCorp Vault out of the box (since v1.1.0 the integration is built into the core — no extra imports, no registration). Your config file holds only the *path* to a secret; the value is fetched at load time and refreshed in the background automatically. `sconf/secret` defines the field types (its only external dependencies are the YAML/TOML parsers, used to decode credentials stored as text inside a KV field); the Vault client itself lives in the internal `sconf/internal/vault` package.
 
 ## How it works
 
@@ -14,7 +14,7 @@ If the struct has **no** secret fields, Vault is never contacted and no environm
 
 | Type | Vault operation | Read the value via | Typical engines |
 |---|---|---|---|
-| `secret.UserPass` | read (`GET`) | `Username()`, `Password()` | `database` dynamic/static creds, `openldap`, `ad`, KV with `username`/`password` fields |
+| `secret.UserPass` | read (`GET`) | `Username()`, `Password()` | `database` dynamic/static creds, `openldap`, `ad`, KV with `username`/`password` fields, or a single KV text field via `?field=` |
 | `secret.Value` | read (`GET`) | `Get()` | KV v1/v2, single field |
 | `secret.KV` | read (`GET`) | `Get(key)`, `Values()` | KV v1/v2, all fields at once |
 | `secret.Cert` | write (`PUT`) | `Certificate()`, `PrivateKey()`, `IssuingCA()`, `CAChain()`, `SerialNumber()` | `pki` issue |
@@ -31,12 +31,18 @@ secret/data/billing?field=stripe_key
 pki/issue/internal?common_name=billing.internal&ttl=24h&refresh=12h
 ```
 
-Reserved parameters are consumed by the resolver: `refresh` (explicit refresh interval), `field` (for `secret.Value`), `username_field` and `password_field` (for `secret.UserPass`). For `secret.Cert`, **all other parameters** are sent to Vault as the issue-request body (`common_name`, `alt_names`, `ip_sans`, `ttl`, `format`, ...).
+Reserved parameters are consumed by the resolver: `refresh` (explicit refresh interval), `field` (for `secret.Value` and `secret.UserPass`), `username_field` and `password_field` (for `secret.UserPass`). For `secret.Cert`, **all other parameters** are sent to Vault as the issue-request body (`common_name`, `alt_names`, `ip_sans`, `ttl`, `format`, ...).
 
 Type-specific behavior, verified in tests and the example below:
 
 - `secret.UserPass` reads `username` (or `?username_field=`) and picks the password from `current_password` when present (Active Directory returns it), otherwise `password` — so `database`, `openldap`, and `ad` all work without configuration. `?password_field=` overrides the heuristic.
-- `secret.KV` and `secret.Value` automatically unwrap the KV v2 envelope (`data`/`metadata`), so for KV v2 you write the path with the `data` segment (`secret/data/billing`) and still address the inner fields directly.
+- `secret.UserPass` with `?field=` (since v1.6.0) takes credentials from a **single text field** of a KV secret: the field's text is parsed as JSON, then YAML, then TOML, and username/password are read from the parsed mapping (the `username_field`/`password_field` overrides apply to it). A missing field or text that is not a mapping in any of the three formats is an error:
+
+  ```yaml
+  redis: A/APP/OSH/KV/secrets?field=redis
+  # the "redis" field inside the KV secret holds e.g. {"username": "svc", "password": "pw"}
+  ```
+- `secret.KV`, `secret.Value`, and (since v1.6.0) `secret.UserPass` automatically unwrap the KV v2 envelope (`data`/`metadata`), so for KV v2 you write the path with the `data` segment (`secret/data/billing`) and still address the inner fields directly.
 - `secret.Value` without `?field=` works when the secret has exactly one field; otherwise it fails listing the available fields.
 
 ## A complete, runnable example
@@ -150,7 +156,7 @@ The connection is configured entirely through environment variables:
 | `VAULT_K8S_TOKEN_PATH` | Service-account token path | `/var/run/secrets/kubernetes.io/serviceaccount/token` |
 | `VAULT_ROLE_ID` / `VAULT_SECRET_ID` | AppRole credentials (required for `approle` auth) | — |
 | `VAULT_APPROLE_MOUNT` | AppRole auth mount | `approle` |
-| `VAULT_SECRETS_FILE` | Local secrets file — enables offline development mode | — |
+| `VAULT_SECRETS_FILE` | Local secrets file — enables offline development mode | `vault.secrets` in the working directory, if it exists |
 | `VAULT_WAIT` | Wait budget for Vault to become reachable at startup (Go duration) | off |
 | `VAULT_WAIT_INTERVAL` | Pause between attempts while waiting | `2s` |
 
@@ -177,9 +183,9 @@ For the [`AddVaultKV`/`AddVaultKVAt` layers](#the-vault-kv-configuration-layer) 
 
 In Kubernetes with istio, `VAULT_WAIT=30s` complements `holdApplicationUntilProxyStarts: true` — the app starts once the sidecar is ready, and the wait rides out the remaining seconds before egress works.
 
-## Local development: `VAULT_SECRETS_FILE`
+## Local development: `VAULT_SECRETS_FILE` / `vault.secrets`
 
-Set `VAULT_SECRETS_FILE` to a YAML (or JSON) file and secrets are served from it instead of Vault — no server, no `VAULT_ADDR`, no authentication. The file maps **the same full paths your config uses** to the fields Vault would return:
+Set `VAULT_SECRETS_FILE` to a YAML (or JSON) file and secrets are served from it instead of Vault — no server, no `VAULT_ADDR`, no authentication. Since v1.5.0 the variable is optional: when it is not set but a file named `vault.secrets` exists in the working directory, that file is picked up automatically (the explicit variable always wins). The file maps **the same full paths your config uses** to the fields Vault would return:
 
 ```yaml
 # dev-secrets.yaml — local stand-in for Vault. Do not commit real secrets.
@@ -205,8 +211,10 @@ pki/issue/internal:
 ```
 
 ::: warning
-`VAULT_MOUNTPATH` is **not** applied in file mode — the file keys must match the paths written in the application config verbatim. There are no leases in file mode, so refresh intervals fall back to the defaults (or `?refresh=`). Add the file to `.gitignore`.
+`VAULT_MOUNTPATH` is **not** applied in file mode — the file keys must match the paths written in the application config verbatim (query-string parameters such as `?field=` or `?common_name=` stay in the application config and are never part of the file keys). There are no leases in file mode, so refresh intervals fall back to the defaults (or `?refresh=`). Add the file to `.gitignore`.
 :::
+
+A fully commented reference covering every secret type — including credentials parsed from a single JSON/YAML/TOML text field — ships in the repository as [`vault.secrets.example`](https://github.com/dvislobokov/sconf/blob/main/vault.secrets.example); copy it to `vault.secrets` to start.
 
 ## The Vault KV configuration layer
 
