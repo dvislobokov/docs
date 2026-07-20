@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Go Libraries',
-  description: 'Documentation for sconf, sorm, srog, shost, smsg and protogen — configuration, ORM, structured logging, hosting, messaging and protobuf codegen for Go.',
+  description: 'Documentation for sconf, sorm, srog, shost, smsg, scmd and protogen — configuration, ORM, structured logging, hosting, messaging, CLI framework and protobuf codegen for Go.',
   base: '/docs/',
   lastUpdated: true,
   cleanUrls: true,
@@ -18,6 +18,7 @@ export default defineConfig({
       { text: 'srog', link: '/srog/', activeMatch: '^/srog/' },
       { text: 'shost', link: '/shost/', activeMatch: '^/shost/' },
       { text: 'smsg', link: '/smsg/', activeMatch: '^/smsg/' },
+      { text: 'scmd', link: '/scmd/', activeMatch: '^/scmd/' },
       { text: 'protogen', link: '/protogen/', activeMatch: '^/protogen/' },
     ],
 
@@ -176,6 +177,30 @@ export default defineConfig({
         {
           text: 'Reference',
           items: [{ text: 'API Reference', link: '/smsg/api' }],
+        },
+      ],
+
+      '/scmd/': [
+        {
+          text: 'scmd',
+          items: [
+            { text: 'Overview', link: '/scmd/' },
+            { text: 'Quick Start', link: '/scmd/quick-start' },
+          ],
+        },
+        {
+          text: 'Guide',
+          items: [
+            { text: 'Commands', link: '/scmd/commands' },
+            { text: 'Tags Reference', link: '/scmd/tags' },
+            { text: 'Configuration Layers', link: '/scmd/configuration' },
+            { text: 'Completion, Docs, Localization', link: '/scmd/completion-docs' },
+            { text: 'Testing', link: '/scmd/testing' },
+          ],
+        },
+        {
+          text: 'Reference',
+          items: [{ text: 'API Reference', link: '/scmd/api' }],
         },
       ],
 
